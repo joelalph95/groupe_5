@@ -79,15 +79,25 @@ router.post('/commandes', authenticateToken, async (req, res) => {
   try {
     const { pharmacien_id, items, adresse_livraison, mode_paiement, ordonnance_url } = req.body;
     
+    // Vérifier que le panier n'est pas vide
+    if (!items || items.length === 0) {
+      return res.status(400).json({ error: 'Panier vide' });
+    }
+    
+    // Rendre pharmacien_id optionnel
+    const finalPharmacienId = pharmacien_id || null;
+    
     // Calculer le montant total
     let montant_total = 0;
     for (const item of items) {
       const medicament = await db.Medicament.findByPk(item.medicament_id);
       if (!medicament) {
-        throw new Error(`Médicament ${item.medicament_id} non trouvé`);
+        await transaction.rollback();
+        return res.status(404).json({ error: `Médicament ${item.medicament_id} non trouvé` });
       }
       if (medicament.stock < item.quantite) {
-        throw new Error(`Stock insuffisant pour ${medicament.nom}`);
+        await transaction.rollback();
+        return res.status(400).json({ error: `Stock insuffisant pour ${medicament.nom}` });
       }
       montant_total += parseFloat(medicament.prix) * item.quantite;
     }
@@ -95,7 +105,7 @@ router.post('/commandes', authenticateToken, async (req, res) => {
     // Créer la commande
     const commande = await db.Commande.create({
       patient_id: req.user.id,
-      pharmacien_id,
+      pharmacien_id: finalPharmacienId,
       montant_total,
       adresse_livraison,
       mode_paiement,
@@ -146,7 +156,10 @@ router.get('/commandes', authenticateToken, async (req, res) => {
       include: [
         {
           model: db.CommandeDetail,
-          include: [db.Medicament]
+          include: [{
+            model: db.Medicament,
+            attributes: ['id', 'nom', 'prix']
+          }]
         },
         {
           model: db.Pharmacien,

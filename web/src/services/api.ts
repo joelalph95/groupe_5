@@ -115,7 +115,9 @@ export const pharmacyService = {
   },
   
   createCommande: async (data: any): Promise<{ success: boolean; commande: any }> => {
-    const response = await api.post('/pharmacy/commandes', data);
+    // Ne pas envoyer patient_id - le backend le récupère du token
+    const { patient_id, ...orderData } = data;
+    const response = await api.post('/pharmacy/commandes', orderData);
     return response.data;
   },
   

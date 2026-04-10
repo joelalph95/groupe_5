@@ -80,8 +80,24 @@ const PatientPage: React.FC = () => {
   
   // Wellness
   const [wellnessTab, setWellnessTab] = useState<'femme' | 'homme' | 'mental' | 'articles' | 'stats'>('femme');
-  const [pregnancy, setPregnancy] = useState({ week: 24, dueDate: '2025-05-15' });
-  const [cycleDays, setCycleDays] = useState<number[]>([1, 2, 3, 4, 5, 28, 29, 30]);
+  
+  // Données calculées automatiquement - FEMME
+  const [cycleJour, setCycleJour] = useState(1);
+  const [cycleDuree, setCycleDuree] = useState(28);
+  const [derniereRegle, setDerniereRegle] = useState<Date | null>(null);
+  const [pregnancies, setPregnancies] = useState<any[]>([]);
+  const [showAddPregnancyModal, setShowAddPregnancyModal] = useState(false);
+  const [newPregnancy, setNewPregnancy] = useState({ semaine: 0, dateAccouchement: '' });
+  
+  // Données - HOMME
+  const [psaTests, setPsaTests] = useState<any[]>([]);
+  const [showAddPSAModal, setShowAddPSAModal] = useState(false);
+  const [newPSA, setNewPSA] = useState({ date: '', valeur: '' });
+  const [activites, setActivites] = useState<any[]>([]);
+  const [showAddActiviteModal, setShowAddActiviteModal] = useState(false);
+  const [newActivite, setNewActivite] = useState({ date: '', duree: 30, type: 'Marche' });
+  
+  // Humeur
   const [moodHistory, setMoodHistory] = useState([
     { date: 'Lun', score: 7 }, { date: 'Mar', score: 5 }, { date: 'Mer', score: 8 },
     { date: 'Jeu', score: 4 }, { date: 'Ven', score: 6 }, { date: 'Sam', score: 9 }, { date: 'Dim', score: 7 }
@@ -96,12 +112,183 @@ const PatientPage: React.FC = () => {
   const homeMapRef = useRef<L.Map | null>(null);
   const urgenceMapRef = useRef<L.Map | null>(null);
   const chartRefs = useRef<{ [key: string]: Chart | null }>({});
-  
-  // Refs pour les modals
   const chatMessagesRef = useRef<HTMLDivElement>(null);
 
+  // ========== FONCTIONS DE CALCUL ==========
+  
+  const calculateCycleDay = () => {
+    if (derniereRegle) {
+      const today = new Date();
+      const diffDays = Math.floor((today.getTime() - derniereRegle.getTime()) / (1000 * 3600 * 24));
+      const jour = (diffDays % cycleDuree) + 1;
+      setCycleJour(jour > cycleDuree ? cycleDuree : jour);
+    }
+  };
+
+  const getDernierPSA = () => {
+    if (psaTests.length === 0) return null;
+    const sorted = [...psaTests].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return sorted[0];
+  };
+
+  const getJoursActifsSemaine = () => {
+    const today = new Date();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay());
+    const weekActivites = activites.filter(a => new Date(a.date) >= startOfWeek);
+    return weekActivites.length;
+  };
+
+  // ========== CHARGEMENT / SAUVEGARDE ==========
+  
+  const loadData = () => {
+    // Données cycle
+    const savedCycle = localStorage.getItem('cycleData');
+    if (savedCycle) {
+      const data = JSON.parse(savedCycle);
+      setCycleDuree(data.cycleDuree || 28);
+      if (data.derniereRegle) {
+        setDerniereRegle(new Date(data.derniereRegle));
+      }
+    }
+    
+    // Grossesses
+    const savedPregnancies = localStorage.getItem('pregnancies');
+    if (savedPregnancies) {
+      setPregnancies(JSON.parse(savedPregnancies));
+    }
+    
+    // PSA tests
+    const savedPSA = localStorage.getItem('psaTests');
+    if (savedPSA) {
+      setPsaTests(JSON.parse(savedPSA));
+    }
+    
+    // Activités
+    const savedActivites = localStorage.getItem('activites');
+    if (savedActivites) {
+      setActivites(JSON.parse(savedActivites));
+    }
+    
+    // Humeur
+    const savedMood = localStorage.getItem('moodHistory');
+    if (savedMood) {
+      setMoodHistory(JSON.parse(savedMood));
+    }
+  };
+
+  const saveCycleData = () => {
+    localStorage.setItem('cycleData', JSON.stringify({
+      cycleDuree,
+      derniereRegle: derniereRegle?.toISOString()
+    }));
+    calculateCycleDay();
+    showToast('Cycle menstruel mis à jour', 'success');
+  };
+
+  const saveMoodHistory = (newHistory: any[]) => {
+    setMoodHistory(newHistory);
+    localStorage.setItem('moodHistory', JSON.stringify(newHistory));
+  };
+
+  // ========== ACTIONS FEMME ==========
+  
+  const addPregnancy = () => {
+    if (newPregnancy.semaine > 0) {
+      const newPreg = {
+        id: Date.now(),
+        semaine: newPregnancy.semaine,
+        dateAccouchement: newPregnancy.dateAccouchement,
+        dateAjout: new Date().toISOString()
+      };
+      const updated = [...pregnancies, newPreg];
+      setPregnancies(updated);
+      localStorage.setItem('pregnancies', JSON.stringify(updated));
+      showToast('Grossesse ajoutée', 'success');
+      setShowAddPregnancyModal(false);
+      setNewPregnancy({ semaine: 0, dateAccouchement: '' });
+    }
+  };
+
+  const deletePregnancy = (id: number) => {
+    const updated = pregnancies.filter(p => p.id !== id);
+    setPregnancies(updated);
+    localStorage.setItem('pregnancies', JSON.stringify(updated));
+    showToast('Grossesse supprimée', 'info');
+  };
+
+  // ========== ACTIONS HOMME ==========
+  
+  const addPSATest = () => {
+    if (newPSA.date && newPSA.valeur) {
+      const newTest = {
+        id: Date.now(),
+        date: newPSA.date,
+        valeur: parseFloat(newPSA.valeur),
+        dateAjout: new Date().toISOString()
+      };
+      const updated = [...psaTests, newTest];
+      setPsaTests(updated);
+      localStorage.setItem('psaTests', JSON.stringify(updated));
+      showToast('Dépistage PSA ajouté', 'success');
+      setShowAddPSAModal(false);
+      setNewPSA({ date: '', valeur: '' });
+    }
+  };
+
+  const deletePSATest = (id: number) => {
+    const updated = psaTests.filter(p => p.id !== id);
+    setPsaTests(updated);
+    localStorage.setItem('psaTests', JSON.stringify(updated));
+    showToast('Dépistage supprimé', 'info');
+  };
+
+  const addActivite = () => {
+    if (newActivite.date) {
+      const newAct = {
+        id: Date.now(),
+        date: newActivite.date,
+        duree: newActivite.duree,
+        type: newActivite.type,
+        dateAjout: new Date().toISOString()
+      };
+      const updated = [...activites, newAct];
+      setActivites(updated);
+      localStorage.setItem('activites', JSON.stringify(updated));
+      showToast('Activité ajoutée', 'success');
+      setShowAddActiviteModal(false);
+      setNewActivite({ date: '', duree: 30, type: 'Marche' });
+    }
+  };
+
+  const deleteActivite = (id: number) => {
+    const updated = activites.filter(a => a.id !== id);
+    setActivites(updated);
+    localStorage.setItem('activites', JSON.stringify(updated));
+    showToast('Activité supprimée', 'info');
+  };
+
+  // ========== ACTIONS COMMUNES ==========
+  
+  const logMood = (score: number) => {
+    const days = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+    const newHistory = [...moodHistory, { date: days[new Date().getDay()], score }];
+    if (newHistory.length > 7) newHistory.shift();
+    saveMoodHistory(newHistory);
+    showToast(`Humeur enregistrée: ${score}/10`, 'success');
+    addNotification('MOOD_ALERT', 'Humeur enregistrée', `Score: ${score}/10`);
+  };
+
+  const avgMood = () => {
+    return Math.round(moodHistory.reduce((a, b) => a + b.score, 0) / moodHistory.length * 10) / 10;
+  };
+
+  // ========== INITIALISATION ==========
+  
   useEffect(() => {
     loadInitialData();
+    loadData();
+    calculateCycleDay();
     
     window.addEventListener('online', () => setIsOnline(true));
     window.addEventListener('offline', () => setIsOnline(false));
@@ -124,7 +311,14 @@ const PatientPage: React.FC = () => {
     if (currentPage === 'bienetre' && wellnessTab === 'stats') {
       setTimeout(initWellnessCharts, 100);
     }
-  }, [currentPage, wellnessTab]);
+    if (currentPage === 'pharmacie' && pharmTab === 'orders') {
+      loadOrders();
+    }
+  }, [currentPage, wellnessTab, pharmTab]);
+
+  useEffect(() => {
+    calculateCycleDay();
+  }, [derniereRegle, cycleDuree]);
 
   const loadInitialData = async () => {
     setLoading(true);
@@ -146,6 +340,15 @@ const PatientPage: React.FC = () => {
       console.error('Erreur chargement données:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadOrders = async () => {
+    try {
+      const userOrders = await pharmacyService.getCommandes();
+      setOrders(userOrders);
+    } catch (error) {
+      console.error('Erreur chargement commandes:', error);
     }
   };
 
@@ -171,6 +374,7 @@ const PatientPage: React.FC = () => {
   };
 
   const formatDate = (dateStr: string) => {
+    if (!dateStr) return 'Non défini';
     const d = new Date(dateStr);
     return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
   };
@@ -183,31 +387,29 @@ const PatientPage: React.FC = () => {
     return `${Math.floor(diff / 86400)} j`;
   };
 
-  const avgMood = () => {
-    return Math.round(moodHistory.reduce((a, b) => a + b.score, 0) / moodHistory.length * 10) / 10;
+  // ========== MAPS ==========
+  
+  const initHomeMap = () => {
+    const mapEl = document.getElementById('homeMap');
+    if (!mapEl || homeMapRef.current) return;
+    
+    homeMapRef.current = L.map('homeMap', { zoomControl: false, attributionControl: false }).setView(TANA, 14);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(homeMapRef.current);
+    
+    const userIcon = L.divIcon({ className: '', html: '<div class="user-marker"></div>', iconSize: [20, 20], iconAnchor: [10, 10] });
+    L.marker(TANA, { icon: userIcon }).addTo(homeMapRef.current);
+    
+    hospitals.slice(0, 3).forEach(h => {
+      const lat = h.latitude || -18.88;
+      const lng = h.longitude || 47.52;
+      if (lat && lng) {
+        const icon = L.divIcon({ className: '', html: '<div class="hospital-marker"><i class="fas fa-hospital text-white"></i></div>', iconSize: [32, 32], iconAnchor: [16, 16] });
+        L.marker([lat, lng], { icon }).addTo(homeMapRef.current!).bindPopup(`<b>${h.nom}</b>`);
+      }
+    });
+    
+    setTimeout(() => homeMapRef.current?.invalidateSize(), 200);
   };
-
- const initHomeMap = () => {
-  const mapEl = document.getElementById('homeMap');
-  if (!mapEl || homeMapRef.current) return;
-  
-  homeMapRef.current = L.map('homeMap', { zoomControl: false, attributionControl: false }).setView(TANA, 14);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(homeMapRef.current);
-  
-  const userIcon = L.divIcon({ className: '', html: '<div class="user-marker"></div>', iconSize: [20, 20], iconAnchor: [10, 10] });
-  L.marker(TANA, { icon: userIcon }).addTo(homeMapRef.current);
-  
-  hospitals.slice(0, 3).forEach(h => {
-    const lat = h.latitude || -18.88;
-    const lng = h.longitude || 47.52;
-    if (lat && lng) {
-      const icon = L.divIcon({ className: '', html: '<div class="hospital-marker"><i class="fas fa-hospital text-white"></i></div>', iconSize: [32, 32], iconAnchor: [16, 16] });
-      L.marker([lat, lng], { icon }).addTo(homeMapRef.current!).bindPopup(`<b>${h.nom}</b>`);
-    }
-  });
-  
-  setTimeout(() => homeMapRef.current?.invalidateSize(), 200);
-};
 
   const initUrgenceMap = () => {
     const mapEl = document.getElementById('urgenceMap');
@@ -227,62 +429,59 @@ const PatientPage: React.FC = () => {
     renderMapMarkers('all');
   };
 
-const renderMapMarkers = (filter: string) => {
-  if (!urgenceMapRef.current) return;
-  
-  // Nettoyer les markers existants
-  urgenceMapRef.current.eachLayer(l => { 
-    if (l instanceof L.Marker) {
-      urgenceMapRef.current!.removeLayer(l);
+  const renderMapMarkers = (filter: string) => {
+    if (!urgenceMapRef.current) return;
+    
+    urgenceMapRef.current.eachLayer(l => { 
+      if (l instanceof L.Marker) {
+        urgenceMapRef.current!.removeLayer(l);
+      }
+    });
+    
+    const userIcon = L.divIcon({ className: '', html: '<div class="user-marker"></div>', iconSize: [20, 20], iconAnchor: [10, 10] });
+    L.marker(TANA, { icon: userIcon }).addTo(urgenceMapRef.current);
+    
+    if (filter === 'all' || filter === 'hospital') {
+      hospitals.forEach(h => {
+        const lat = h.latitude || -18.88;
+        const lng = h.longitude || 47.52;
+        if (lat && lng) {
+          const icon = L.divIcon({ className: '', html: '<div class="hospital-marker"><i class="fas fa-hospital text-white"></i></div>', iconSize: [32, 32], iconAnchor: [16, 16] });
+          L.marker([lat, lng], { icon }).addTo(urgenceMapRef.current!).bindPopup(`<b>${h.nom}</b><br><i class="fas fa-phone"></i> ${h.telephone}`);
+        }
+      });
     }
-  });
-  
-  // Remettre le marker utilisateur
-  const userIcon = L.divIcon({ className: '', html: '<div class="user-marker"></div>', iconSize: [20, 20], iconAnchor: [10, 10] });
-  L.marker(TANA, { icon: userIcon }).addTo(urgenceMapRef.current);
-  
-  // Ajouter les hôpitaux
-  if (filter === 'all' || filter === 'hospital') {
-    hospitals.forEach(h => {
-      const lat = h.latitude || -18.88;
-      const lng = h.longitude || 47.52;
-      if (lat && lng) {
-        const icon = L.divIcon({ className: '', html: '<div class="hospital-marker"><i class="fas fa-hospital text-white"></i></div>', iconSize: [32, 32], iconAnchor: [16, 16] });
-        L.marker([lat, lng], { icon }).addTo(urgenceMapRef.current!).bindPopup(`<b>${h.nom}</b><br><i class="fas fa-phone"></i> ${h.telephone}`);
-      }
-    });
-  }
-  
-  // Ajouter les ambulances
-  if (filter === 'all' || filter === 'ambulance') {
-    ambulances.forEach(a => {
-      const lat = a.lat || -18.88;
-      const lng = a.lng || 47.52;
-      if (lat && lng) {
-        const color = a.status === 'DISPONIBLE' ? '#10b981' : '#52525b';
-        const icon = L.divIcon({ className: '', html: `<div class="ambulance-marker" style="background:${color}"><i class="fas fa-ambulance text-white"></i></div>`, iconSize: [40, 40], iconAnchor: [20, 20] });
-        L.marker([lat, lng], { icon }).addTo(urgenceMapRef.current!).bindPopup(`<b>${a.name}</b><br>Chauffeur: ${a.driver}<br>Statut: ${a.status}<br><i class="fas fa-phone"></i> ${a.phone}`);
-      }
-    });
-  }
-  
-  // Ajouter les pharmacies
-  if (filter === 'all' || filter === 'pharmacy') {
-    pharmacies.forEach(p => {
-      const lat = p.lat || -18.88;
-      const lng = p.lng || 47.52;
-      if (lat && lng) {
-        const icon = L.divIcon({ className: '', html: '<div class="pharmacy-marker"><i class="fas fa-pills text-white"></i></div>', iconSize: [32, 32], iconAnchor: [16, 16] });
-        L.marker([lat, lng], { icon }).addTo(urgenceMapRef.current!).bindPopup(`<b>${p.name}</b><br><i class="fas fa-phone"></i> ${p.phone}<br>${p.online ? '🟢 En ligne' : '🔴 Hors ligne'}`);
-      }
-    });
-  }
-};
+    
+    if (filter === 'all' || filter === 'ambulance') {
+      ambulances.forEach(a => {
+        const lat = a.lat || -18.88;
+        const lng = a.lng || 47.52;
+        if (lat && lng) {
+          const color = a.status === 'DISPONIBLE' ? '#10b981' : '#52525b';
+          const icon = L.divIcon({ className: '', html: `<div class="ambulance-marker" style="background:${color}"><i class="fas fa-ambulance text-white"></i></div>`, iconSize: [40, 40], iconAnchor: [20, 20] });
+          L.marker([lat, lng], { icon }).addTo(urgenceMapRef.current!).bindPopup(`<b>${a.name}</b><br>Chauffeur: ${a.driver}<br>Statut: ${a.status}<br><i class="fas fa-phone"></i> ${a.phone}`);
+        }
+      });
+    }
+    
+    if (filter === 'all' || filter === 'pharmacy') {
+      pharmacies.forEach(p => {
+        const lat = p.lat || -18.88;
+        const lng = p.lng || 47.52;
+        if (lat && lng) {
+          const icon = L.divIcon({ className: '', html: '<div class="pharmacy-marker"><i class="fas fa-pills text-white"></i></div>', iconSize: [32, 32], iconAnchor: [16, 16] });
+          L.marker([lat, lng], { icon }).addTo(urgenceMapRef.current!).bindPopup(`<b>${p.name}</b><br><i class="fas fa-phone"></i> ${p.phone}<br>${p.online ? '🟢 En ligne' : '🔴 Hors ligne'}`);
+        }
+      });
+    }
+  };
 
   const filterMap = (filter: string) => {
     renderMapMarkers(filter);
   };
 
+  // ========== SOS ==========
+  
   const triggerSOS = () => {
     setShowSOSModal(true);
   };
@@ -290,7 +489,6 @@ const renderMapMarkers = (filter: string) => {
   const sendSOSOnline = async () => {
     setLoading(true);
     try {
-      // Utiliser createUrgence (méthode existante) pour créer/enregistrer l'urgence côté serveur
       await emergencyService.createUrgence({
         latitude: TANA[0],
         longitude: TANA[1],
@@ -317,6 +515,8 @@ const renderMapMarkers = (filter: string) => {
     setShowSOSModal(false);
   };
 
+  // ========== PANIER & COMMANDES ==========
+  
   const addToCart = (med: Medicament) => {
     const existing = cart.find(c => c.medicament_id === med.id);
     if (existing) {
@@ -352,24 +552,38 @@ const renderMapMarkers = (filter: string) => {
     
     setLoading(true);
     try {
-      await pharmacyService.createCommande({
-        pharmacien_id: 1,
-        items: cart.map(c => ({ medicament_id: c.medicament_id, quantite: c.quantite })),
+      const response = await pharmacyService.createCommande({
+        items: cart.map(c => ({ 
+          medicament_id: c.medicament_id, 
+          quantite: c.quantite 
+        })),
         adresse_livraison: deliveryAddr,
         mode_paiement: 'ESPECES',
       });
       
-      showToast('Commande confirmée !', 'success');
-      addNotification('ORDER_STATUS', 'Commande confirmée', `Votre commande a été confirmée`);
-      setCart([]);
-      setShowCartModal(false);
-    } catch (error) {
-      showToast('Erreur lors de la commande', 'error');
+      if (response && response.success) {
+        showToast('Commande confirmée !', 'success');
+        addNotification('ORDER_STATUS', 'Commande confirmée', `Votre commande a été confirmée`);
+        setCart([]);
+        setShowCartModal(false);
+        
+        if (pharmTab === 'orders') {
+          await loadOrders();
+        }
+      } else {
+        showToast('Erreur lors de la commande', 'error');
+      }
+    } catch (error: any) {
+      console.error('Order error:', error);
+      const errorMessage = error?.response?.data?.error || 'Erreur lors de la commande';
+      showToast(errorMessage, 'error');
     } finally {
       setLoading(false);
     }
   };
 
+  // ========== CHATBOT ==========
+  
   const sendChat = async () => {
     if (!chatInput.trim()) return;
     
@@ -402,17 +616,8 @@ const renderMapMarkers = (filter: string) => {
     }
   };
 
-  const logMood = (score: number) => {
-    const days = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
-    setMoodHistory(prev => {
-      const newHistory = [...prev, { date: days[new Date().getDay()], score }];
-      if (newHistory.length > 7) newHistory.shift();
-      return newHistory;
-    });
-    showToast(`Humeur enregistrée: ${score}/10`, 'success');
-    addNotification('MOOD_ALERT', 'Humeur enregistrée', `Score: ${score}/10`);
-  };
-
+  // ========== CHARTS ==========
+  
   const initWellnessCharts = () => {
     const ctx1 = document.getElementById('chartMood30') as HTMLCanvasElement;
     if (ctx1) {
@@ -457,100 +662,200 @@ const renderMapMarkers = (filter: string) => {
     navigate('/login');
   };
 
-  // Render functions for different tabs
+  // ========== MODALS ==========
+  
+  const renderAddPregnancyModal = () => (
+    <div className="modal-overlay" onClick={() => setShowAddPregnancyModal(false)}>
+      <div className="modal-content p-4 sm:p-6 max-w-md" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-bold"><i className="fas fa-baby text-pink-400 mr-2"></i>Ajouter une grossesse</h3>
+          <button onClick={() => setShowAddPregnancyModal(false)} className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center">
+            <i className="fas fa-times text-zinc-400 text-xs"></i>
+          </button>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs text-zinc-400 block mb-1">Semaines de grossesse</label>
+            <input type="number" min="1" max="42" value={newPregnancy.semaine} onChange={e => setNewPregnancy({...newPregnancy, semaine: parseInt(e.target.value) || 0})} className="input-modern w-full px-4 py-3 rounded-xl text-white" />
+          </div>
+          <div>
+            <label className="text-xs text-zinc-400 block mb-1">Date d'accouchement prévue</label>
+            <input type="date" value={newPregnancy.dateAccouchement} onChange={e => setNewPregnancy({...newPregnancy, dateAccouchement: e.target.value})} className="input-modern w-full px-4 py-3 rounded-xl text-white" />
+          </div>
+          <button onClick={addPregnancy} className="w-full bg-pink-500 text-white py-3 rounded-xl font-semibold">Ajouter</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderAddPSAModal = () => (
+    <div className="modal-overlay" onClick={() => setShowAddPSAModal(false)}>
+      <div className="modal-content p-4 sm:p-6 max-w-md" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-bold"><i className="fas fa-shield-alt text-info mr-2"></i>Ajouter un dépistage PSA</h3>
+          <button onClick={() => setShowAddPSAModal(false)} className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center">
+            <i className="fas fa-times text-zinc-400 text-xs"></i>
+          </button>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs text-zinc-400 block mb-1">Date du dépistage</label>
+            <input type="date" value={newPSA.date} onChange={e => setNewPSA({...newPSA, date: e.target.value})} className="input-modern w-full px-4 py-3 rounded-xl text-white" />
+          </div>
+          <div>
+            <label className="text-xs text-zinc-400 block mb-1">Valeur PSA (ng/mL)</label>
+            <input type="number" step="0.1" value={newPSA.valeur} onChange={e => setNewPSA({...newPSA, valeur: e.target.value})} className="input-modern w-full px-4 py-3 rounded-xl text-white" placeholder="1.2" />
+          </div>
+          <button onClick={addPSATest} className="w-full bg-info text-white py-3 rounded-xl font-semibold">Ajouter</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderAddActiviteModal = () => (
+    <div className="modal-overlay" onClick={() => setShowAddActiviteModal(false)}>
+      <div className="modal-content p-4 sm:p-6 max-w-md" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-bold"><i className="fas fa-running text-success mr-2"></i>Ajouter une activité</h3>
+          <button onClick={() => setShowAddActiviteModal(false)} className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center">
+            <i className="fas fa-times text-zinc-400 text-xs"></i>
+          </button>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs text-zinc-400 block mb-1">Date</label>
+            <input type="date" value={newActivite.date} onChange={e => setNewActivite({...newActivite, date: e.target.value})} className="input-modern w-full px-4 py-3 rounded-xl text-white" />
+          </div>
+          <div>
+            <label className="text-xs text-zinc-400 block mb-1">Type d'activité</label>
+            <select value={newActivite.type} onChange={e => setNewActivite({...newActivite, type: e.target.value})} className="input-modern w-full px-4 py-3 rounded-xl text-white">
+              <option>Marche</option><option>Course</option><option>Natation</option><option>Vélo</option><option>Musculation</option><option>Yoga</option><option>Autre</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-zinc-400 block mb-1">Durée (minutes)</label>
+            <input type="number" value={newActivite.duree} onChange={e => setNewActivite({...newActivite, duree: parseInt(e.target.value) || 0})} className="input-modern w-full px-4 py-3 rounded-xl text-white" />
+          </div>
+          <button onClick={addActivite} className="w-full bg-success text-white py-3 rounded-xl font-semibold">Ajouter</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ========== RENDER TABS ==========
+  
   const renderFemmeTab = () => (
     <>
       <div className="card p-4 sm:p-5 mb-3 sm:mb-4">
-        <div className="flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4">
-          <i className="fas fa-calendar-alt text-danger text-sm sm:text-base"></i>
-          <h3 className="text-sm sm:text-base font-semibold">Cycle menstruel</h3>
-          <span className="badge bg-danger/20 text-danger ml-auto text-[10px]">Jour 14</span>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <i className="fas fa-calendar-alt text-danger"></i>
+            <h3 className="text-sm font-semibold">Cycle menstruel</h3>
+          </div>
+          <button onClick={() => {
+            const newDate = prompt("Date des dernières règles (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
+            if (newDate) {
+              setDerniereRegle(new Date(newDate));
+              const newDuree = prompt("Durée du cycle (jours):", "28");
+              if (newDuree) setCycleDuree(parseInt(newDuree));
+              saveCycleData();
+            }
+          }} className="text-xs text-info">📅 Définir</button>
         </div>
-        <div className="flex gap-0.5 sm:gap-1 flex-wrap mb-2 sm:mb-3">
-          {Array.from({ length: 28 }, (_, i) => (
-            <div
-              key={i}
-              className={`cycle-day ${cycleDays.includes(i + 1) ? 'period' : ''} ${i + 1 === 14 ? 'ovulation' : ''} ${i + 1 === new Date().getDate() ? 'today' : ''}`}
-              onClick={() => {
-                if (cycleDays.includes(i + 1)) {
-                  setCycleDays(prev => prev.filter(d => d !== i + 1));
-                } else {
-                  setCycleDays(prev => [...prev, i + 1]);
-                }
-              }}
-            >
-              {i + 1}
-            </div>
-          ))}
+        <div className="text-center p-3 bg-zinc-800/50 rounded-xl mb-2">
+          <p className="text-2xl font-bold text-danger">{cycleJour}</p>
+          <p className="text-xs text-zinc-400">Jour du cycle</p>
         </div>
-        <div className="flex gap-2 sm:gap-4 text-[8px] sm:text-[10px] text-zinc-500 flex-wrap">
-          <span><span className="inline-block w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-danger mr-1"></span>Règles</span>
-          <span><span className="inline-block w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-warn mr-1"></span>Ovulation</span>
-          <span><span className="inline-block w-2 h-2 sm:w-3 sm:h-3 rounded-full border border-info mr-1"></span>Aujourd'hui</span>
-        </div>
+        <p className="text-xs text-zinc-400 text-center">
+          Prochaines règles dans {cycleDuree - cycleJour} jours
+        </p>
+        <p className="text-xs text-zinc-500 text-center mt-2">
+          Cycle de {cycleDuree} jours
+        </p>
       </div>
       
-      <div className="card p-4 sm:p-5 mb-3 sm:mb-4">
-        <div className="flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4">
-          <i className="fas fa-baby text-pink-400 text-sm sm:text-base"></i>
-          <h3 className="text-sm sm:text-base font-semibold">Suivi de grossesse</h3>
-        </div>
-        <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-2 sm:mb-4">
-          <div className="text-center p-2 sm:p-3 bg-zinc-800/50 rounded-xl">
-            <p className="text-base sm:text-xl font-bold text-pink-400">{pregnancy.week}</p>
-            <p className="text-[8px] sm:text-[10px] text-zinc-500">Semaines</p>
+      <div className="card p-4 sm:p-5 mb-3">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <i className="fas fa-baby text-pink-400"></i>
+            <h3 className="text-sm font-semibold">Grossesses</h3>
           </div>
-          <div className="text-center p-2 sm:p-3 bg-zinc-800/50 rounded-xl">
-            <p className="text-base sm:text-xl font-bold text-info">{pregnancy.week > 6 ? Math.floor((pregnancy.week - 6) / 4) : '-'}</p>
-            <p className="text-[8px] sm:text-[10px] text-zinc-500">Mois</p>
-          </div>
-          <div className="text-center p-2 sm:p-3 bg-zinc-800/50 rounded-xl">
-            <p className="text-[10px] sm:text-xl font-bold text-success whitespace-normal break-words">{formatDate(pregnancy.dueDate)}</p>
-            <p className="text-[8px] sm:text-[10px] text-zinc-500">Accouchement</p>
-          </div>
+          <button onClick={() => setShowAddPregnancyModal(true)} className="text-xs text-pink-400">+ Ajouter</button>
         </div>
-        <div className="p-2 sm:p-3 bg-pink-500/10 rounded-xl text-[10px] sm:text-xs text-pink-200">
-          <i className="fas fa-lightbulb mr-1"></i>Conseil: Votre bébé mesure environ 30 cm et pèse 600g. Pensez à vos injections de fer.
-        </div>
+        {pregnancies.length === 0 ? (
+          <p className="text-xs text-zinc-500 text-center py-4">Aucune grossesse enregistrée</p>
+        ) : (
+          pregnancies.map(p => (
+            <div key={p.id} className="bg-zinc-800/30 rounded-xl p-3 mb-2">
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-sm font-bold text-pink-400">{p.semaine} semaines</p>
+                  <p className="text-xs text-zinc-400">Accouchement: {formatDate(p.dateAccouchement)}</p>
+                </div>
+                <button onClick={() => deletePregnancy(p.id)} className="text-danger text-xs">🗑️</button>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </>
   );
 
   const renderHommeTab = () => (
     <>
-      <div className="card p-4 sm:p-5 mb-3 sm:mb-4">
-        <div className="flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4">
-          <i className="fas fa-shield-alt text-info text-sm sm:text-base"></i>
-          <h3 className="text-sm sm:text-base font-semibold">Santé prostate</h3>
+      <div className="card p-4 sm:p-5 mb-3">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <i className="fas fa-shield-alt text-info"></i>
+            <h3 className="text-sm font-semibold">Dépistages PSA</h3>
+          </div>
+          <button onClick={() => setShowAddPSAModal(true)} className="text-xs text-info">+ Ajouter</button>
         </div>
-        <div className="p-2 sm:p-3 bg-zinc-800/50 rounded-xl mb-2 sm:mb-3">
-          <p className="text-[10px] sm:text-xs text-zinc-500 mb-0.5 sm:mb-1">Dernier dépistage PSA</p>
-          <p className="text-[11px] sm:text-sm font-medium">15 Mars 2024 — Résultat: 1.2 ng/mL (Normal)</p>
-        </div>
-        <div className="p-2 sm:p-3 bg-info/10 rounded-xl text-[10px] sm:text-xs text-info">
-          <i className="fas fa-info-circle mr-1"></i>Prochain dépistage recommandé dans 6 mois
-        </div>
+        {psaTests.length === 0 ? (
+          <p className="text-xs text-zinc-500 text-center py-4">Aucun dépistage enregistré</p>
+        ) : (
+          psaTests.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(p => (
+            <div key={p.id} className="bg-zinc-800/30 rounded-xl p-3 mb-2">
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-sm font-bold text-info">{p.valeur} ng/mL</p>
+                  <p className="text-xs text-zinc-400">{formatDate(p.date)}</p>
+                </div>
+                <button onClick={() => deletePSATest(p.id)} className="text-danger text-xs">🗑️</button>
+              </div>
+            </div>
+          ))
+        )}
       </div>
       
-      <div className="card p-4 sm:p-5 mb-3 sm:mb-4">
-        <div className="flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4">
-          <i className="fas fa-running text-success text-sm sm:text-base"></i>
-          <h3 className="text-sm sm:text-base font-semibold">Activité physique</h3>
+      <div className="card p-4 sm:p-5 mb-3">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <i className="fas fa-running text-success"></i>
+            <h3 className="text-sm font-semibold">Activités physiques</h3>
+          </div>
+          <button onClick={() => setShowAddActiviteModal(true)} className="text-xs text-success">+ Ajouter</button>
         </div>
-        <div className="grid grid-cols-7 gap-0.5 sm:gap-1 mb-2 sm:mb-3">
-          {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d, i) => {
-            const active = i < 3 || i === 4;
-            return (
-              <div key={i} className="text-center">
-                <p className="text-[8px] sm:text-[10px] text-zinc-500 mb-0.5 sm:mb-1">{d}</p>
-                <div className={`w-6 h-6 sm:w-8 sm:h-8 mx-auto rounded-full ${active ? 'bg-success/20 border border-success/40' : 'bg-zinc-800'} flex items-center justify-center`}>
-                  <i className={`fas fa-${active ? 'check' : 'times'} text-${active ? 'success' : 'zinc-600'} text-[8px] sm:text-xs`}></i>
-                </div>
+        <div className="text-center mb-3">
+          <p className="text-2xl font-bold text-success">{getJoursActifsSemaine()}</p>
+          <p className="text-xs text-zinc-400">jours actifs cette semaine</p>
+        </div>
+        {activites.length === 0 ? (
+          <p className="text-xs text-zinc-500 text-center py-2">Aucune activité enregistrée</p>
+        ) : (
+          activites.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0,5).map(a => (
+            <div key={a.id} className="flex justify-between items-center py-2 border-b border-zinc-800">
+              <div>
+                <p className="text-xs font-medium">{a.type}</p>
+                <p className="text-[10px] text-zinc-500">{formatDate(a.date)}</p>
               </div>
-            );
-          })}
-        </div>
-        <p className="text-[10px] sm:text-xs text-zinc-400">4 jours actifs cette semaine sur 7</p>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-success">{a.duree} min</span>
+                <button onClick={() => deleteActivite(a.id)} className="text-danger text-xs">🗑️</button>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </>
   );
@@ -643,7 +948,10 @@ const renderMapMarkers = (filter: string) => {
       <div className="card p-4 sm:p-5 mb-3 sm:mb-4">
         <h3 className="text-xs sm:text-sm font-semibold mb-2 sm:mb-4"><i className="fas fa-chart-bar text-warn mr-1 sm:mr-2"></i>Score santé global</h3>
         <div className="space-y-2 sm:space-y-3">
-          {[{ label: 'Physique', val: 72, color: 'bg-success' }, { label: 'Mental', val: 65, color: 'bg-purple-500' }, { label: 'Sommeil', val: 58, color: 'bg-info' }, { label: 'Nutrition', val: 70, color: 'bg-warn' }].map(s => (
+          {[{ label: 'Physique', val: getJoursActifsSemaine() * 12, color: 'bg-success' }, 
+            { label: 'Mental', val: avgMood() * 10, color: 'bg-purple-500' }, 
+            { label: 'Sommeil', val: 65, color: 'bg-info' }, 
+            { label: 'Nutrition', val: 70, color: 'bg-warn' }].map(s => (
             <div key={s.label}>
               <div className="flex justify-between text-[10px] sm:text-sm mb-0.5 sm:mb-1">
                 <span className="text-zinc-400">{s.label}</span>
@@ -657,13 +965,17 @@ const renderMapMarkers = (filter: string) => {
         </div>
         <div className="mt-3 sm:mt-4 p-2 sm:p-3 bg-zinc-800/50 rounded-xl text-center">
           <p className="text-[10px] sm:text-xs text-zinc-500">Score global</p>
-          <p className="text-2xl sm:text-3xl font-bold text-success">66<span className="text-base sm:text-lg text-zinc-500">/100</span></p>
+          <p className="text-2xl sm:text-3xl font-bold text-success">
+            {Math.round((getJoursActifsSemaine() * 12 + avgMood() * 10 + 65 + 70) / 4)}
+            <span className="text-base sm:text-lg text-zinc-500">/100</span>
+          </p>
         </div>
       </div>
     </>
   );
 
-  // Main render
+  // ========== MAIN RENDER ==========
+  
   return (
     <div id="patientApp">
       {loading && <Loading />}
@@ -734,41 +1046,89 @@ const renderMapMarkers = (filter: string) => {
 
             {/* Health Summary */}
             <div className="mb-4 sm:mb-6">
-              <h3 className="text-xs sm:text-sm font-semibold text-zinc-300 mb-2 sm:mb-3">Mon bilan santé</h3>
-              <div className="health-grid">
-                <div className="card p-3 sm:p-4 stat-card">
-                  <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
-                    <i className="fas fa-calendar-alt text-danger text-[10px] sm:text-xs"></i>
-                    <span className="text-[10px] sm:text-xs text-zinc-400">Cycle</span>
-                  </div>
-                  <p className="text-base sm:text-xl font-bold">Jour 14</p>
-                  <p className="text-[8px] sm:text-[10px] text-zinc-500">Prochaines règles dans ~14j</p>
-                </div>
-                <div className="card p-3 sm:p-4 stat-card">
-                  <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
-                    <i className="fas fa-baby text-pink-400 text-[10px] sm:text-xs"></i>
-                    <span className="text-[10px] sm:text-xs text-zinc-400">Grossesse</span>
-                  </div>
-                  <p className="text-base sm:text-xl font-bold">{pregnancy.week} sem</p>
-                  <p className="text-[8px] sm:text-[10px] text-zinc-500">Accouchement: {formatDate(pregnancy.dueDate)}</p>
-                </div>
-                <div className="card p-3 sm:p-4 stat-card">
-                  <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
-                    <i className="fas fa-smile text-success text-[10px] sm:text-xs"></i>
-                    <span className="text-[10px] sm:text-xs text-zinc-400">Humeur</span>
-                  </div>
-                  <p className="text-base sm:text-xl font-bold">{avgMood()}/10</p>
-                  <p className="text-[8px] sm:text-[10px] text-zinc-500">Cette semaine</p>
-                </div>
-                <div className="card p-3 sm:p-4 stat-card">
-                  <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
-                    <i className="fas fa-tint text-danger text-[10px] sm:text-xs"></i>
-                    <span className="text-[10px] sm:text-xs text-zinc-400">Groupe</span>
-                  </div>
-                  <p className="text-base sm:text-xl font-bold">{user?.groupe_sanguin || 'A+'}</p>
-                  <p className="text-[8px] sm:text-[10px] text-zinc-500">Sanguin</p>
-                </div>
+              <div className="flex items-center justify-between mb-2 sm:mb-3">
+                <h3 className="text-xs sm:text-sm font-semibold text-zinc-300">Mon bilan santé</h3>
               </div>
+              
+              {user?.sexe === 'FEMININ' ? (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="card p-3 sm:p-4 stat-card">
+                    <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+                      <i className="fas fa-calendar-alt text-danger text-[10px] sm:text-xs"></i>
+                      <span className="text-[10px] sm:text-xs text-zinc-400">Cycle</span>
+                    </div>
+                    <p className="text-base sm:text-xl font-bold">Jour {cycleJour}</p>
+                    <p className="text-[8px] sm:text-[10px] text-zinc-500">Prochaines règles dans {cycleDuree - cycleJour}j</p>
+                  </div>
+                  
+                  {pregnancies.length > 0 && (
+                    <div className="card p-3 sm:p-4 stat-card">
+                      <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+                        <i className="fas fa-baby text-pink-400 text-[10px] sm:text-xs"></i>
+                        <span className="text-[10px] sm:text-xs text-zinc-400">Grossesse</span>
+                      </div>
+                      <p className="text-base sm:text-xl font-bold">{pregnancies[pregnancies.length-1].semaine} sem</p>
+                      <p className="text-[8px] sm:text-[10px] text-zinc-500">{formatDate(pregnancies[pregnancies.length-1].dateAccouchement)}</p>
+                    </div>
+                  )}
+                  
+                  <div className="card p-3 sm:p-4 stat-card">
+                    <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+                      <i className="fas fa-smile text-success text-[10px] sm:text-xs"></i>
+                      <span className="text-[10px] sm:text-xs text-zinc-400">Humeur</span>
+                    </div>
+                    <p className="text-base sm:text-xl font-bold">{avgMood()}/10</p>
+                    <p className="text-[8px] sm:text-[10px] text-zinc-500">Cette semaine</p>
+                  </div>
+                  
+                  <div className="card p-3 sm:p-4 stat-card">
+                    <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+                      <i className="fas fa-tint text-danger text-[10px] sm:text-xs"></i>
+                      <span className="text-[10px] sm:text-xs text-zinc-400">Groupe</span>
+                    </div>
+                    <p className="text-base sm:text-xl font-bold">{user?.groupe_sanguin || 'A+'}</p>
+                    <p className="text-[8px] sm:text-[10px] text-zinc-500">Sanguin</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="card p-3 sm:p-4 stat-card">
+                    <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+                      <i className="fas fa-shield-alt text-info text-[10px] sm:text-xs"></i>
+                      <span className="text-[10px] sm:text-xs text-zinc-400">PSA</span>
+                    </div>
+                    <p className="text-base sm:text-xl font-bold">{getDernierPSA()?.valeur || '?'} ng/mL</p>
+                    <p className="text-[8px] sm:text-[10px] text-zinc-500">{getDernierPSA() ? formatDate(getDernierPSA().date) : 'Non fait'}</p>
+                  </div>
+                  
+                  <div className="card p-3 sm:p-4 stat-card">
+                    <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+                      <i className="fas fa-running text-success text-[10px] sm:text-xs"></i>
+                      <span className="text-[10px] sm:text-xs text-zinc-400">Sport</span>
+                    </div>
+                    <p className="text-base sm:text-xl font-bold">{getJoursActifsSemaine()}/7</p>
+                    <p className="text-[8px] sm:text-[10px] text-zinc-500">Jours actifs</p>
+                  </div>
+                  
+                  <div className="card p-3 sm:p-4 stat-card">
+                    <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+                      <i className="fas fa-smile text-success text-[10px] sm:text-xs"></i>
+                      <span className="text-[10px] sm:text-xs text-zinc-400">Humeur</span>
+                    </div>
+                    <p className="text-base sm:text-xl font-bold">{avgMood()}/10</p>
+                    <p className="text-[8px] sm:text-[10px] text-zinc-500">Cette semaine</p>
+                  </div>
+                  
+                  <div className="card p-3 sm:p-4 stat-card">
+                    <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+                      <i className="fas fa-tint text-danger text-[10px] sm:text-xs"></i>
+                      <span className="text-[10px] sm:text-xs text-zinc-400">Groupe</span>
+                    </div>
+                    <p className="text-base sm:text-xl font-bold">{user?.groupe_sanguin || 'A+'}</p>
+                    <p className="text-[8px] sm:text-[10px] text-zinc-500">Sanguin</p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Mini Map */}
@@ -779,11 +1139,7 @@ const renderMapMarkers = (filter: string) => {
                   Voir la carte <i className="fas fa-arrow-right ml-1"></i>
                 </button>
               </div>
-              <div
-                id="homeMap"
-                className="h-40 sm:h-48 rounded-2xl overflow-hidden border border-zinc-800"
-                ref={(el) => { if (el) { setTimeout(initHomeMap, 100); } }}
-              ></div>
+              <div id="homeMap" className="h-40 sm:h-48 rounded-2xl overflow-hidden border border-zinc-800" ref={(el) => { if (el) { setTimeout(initHomeMap, 100); } }}></div>
             </div>
 
             {/* Quick Actions */}
@@ -850,9 +1206,7 @@ const renderMapMarkers = (filter: string) => {
                 <i className="fas fa-wifi-slash text-warn mt-0.5 sm:mt-1 text-xs sm:text-sm"></i>
                 <div>
                   <p className="text-xs sm:text-sm font-semibold text-zinc-200">Mode hors-ligne</p>
-                  <p className="text-[10px] sm:text-xs text-zinc-400 mt-0.5 sm:mt-1">
-                    Si pas de connexion, utilisez le BIP : appelez le centre médical le plus proche (appel court). Ils vous rappelleront automatiquement.
-                  </p>
+                  <p className="text-[10px] sm:text-xs text-zinc-400 mt-0.5 sm:mt-1">Si pas de connexion, utilisez le BIP : appelez le centre médical le plus proche (appel court). Ils vous rappelleront automatiquement.</p>
                 </div>
               </div>
             </div>
@@ -866,11 +1220,7 @@ const renderMapMarkers = (filter: string) => {
               <h2 className="text-lg sm:text-xl font-bold">Pharmacie</h2>
               <button onClick={() => setShowCartModal(true)} className="relative w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-zinc-800 flex items-center justify-center">
                 <i className="fas fa-shopping-cart text-zinc-400 text-xs sm:text-sm"></i>
-                {cart.length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-info rounded-full text-[8px] sm:text-[10px] font-bold flex items-center justify-center">
-                    {cart.reduce((a, b) => a + b.quantite, 0)}
-                  </span>
-                )}
+                {cart.length > 0 && (<span className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-info rounded-full text-[8px] sm:text-[10px] font-bold flex items-center justify-center">{cart.reduce((a, b) => a + b.quantite, 0)}</span>)}
               </button>
             </div>
             
@@ -882,13 +1232,7 @@ const renderMapMarkers = (filter: string) => {
             
             <div className="relative mb-3 sm:mb-4">
               <i className="fas fa-search absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 text-zinc-500 text-xs sm:text-sm"></i>
-              <input
-                type="text"
-                value={medSearch}
-                onChange={(e) => setMedSearch(e.target.value)}
-                placeholder="Rechercher un médicament..."
-                className="pl-8 sm:pl-11 text-sm input-modern w-full px-4 py-3 rounded-xl text-white placeholder:text-zinc-600"
-              />
+              <input type="text" value={medSearch} onChange={(e) => setMedSearch(e.target.value)} placeholder="Rechercher un médicament..." className="pl-8 sm:pl-11 text-sm input-modern w-full px-4 py-3 rounded-xl text-white placeholder:text-zinc-600" />
             </div>
             
             {pharmTab === 'medicines' && (
@@ -896,17 +1240,13 @@ const renderMapMarkers = (filter: string) => {
                 {medicines.filter(m => m.nom.toLowerCase().includes(medSearch.toLowerCase())).map(m => (
                   <div key={m.id} className="card p-3 sm:p-4">
                     <div className="flex items-start justify-between mb-1.5 sm:mb-2">
-                      <span className={`badge ${m.necessite_ordonnance ? 'bg-danger/20 text-danger' : 'bg-success/20 text-success'} text-[8px] sm:text-[10px]`}>
-                        {m.necessite_ordonnance ? 'Ordonnance' : 'Libre'}
-                      </span>
+                      <span className={`badge ${m.necessite_ordonnance ? 'bg-danger/20 text-danger' : 'bg-success/20 text-success'} text-[8px] sm:text-[10px]`}>{m.necessite_ordonnance ? 'Ordonnance' : 'Libre'}</span>
                     </div>
                     <p className="text-xs sm:text-sm font-semibold mb-1 leading-tight">{m.nom}</p>
                     <p className="text-[8px] sm:text-[10px] text-zinc-500 mb-2 sm:mb-3">{m.description}</p>
                     <div className="flex items-center justify-between">
                       <p className="text-xs sm:text-sm font-bold text-info">{formatPrice(m.prix)}</p>
-                      <button onClick={() => addToCart(m)} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-info/15 flex items-center justify-center active:scale-90 transition">
-                        <i className="fas fa-plus text-info text-[10px] sm:text-xs"></i>
-                      </button>
+                      <button onClick={() => addToCart(m)} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-info/15 flex items-center justify-center active:scale-90 transition"><i className="fas fa-plus text-info text-[10px] sm:text-xs"></i></button>
                     </div>
                   </div>
                 ))}
@@ -918,19 +1258,39 @@ const renderMapMarkers = (filter: string) => {
                 {pharmacies.map(p => (
                   <div key={p.id} className="card p-3 sm:p-4">
                     <div className="flex items-center gap-3 sm:gap-4 mb-2 sm:mb-3">
-                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-warn/15 flex items-center justify-center">
-                        <i className="fas fa-pills text-warn text-sm sm:text-base"></i>
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-xs sm:text-sm font-semibold">{p.name}</p>
-                        <p className="text-[10px] sm:text-xs text-zinc-400">{p.online ? '🟢 En ligne' : '🔴 Hors ligne'}</p>
-                      </div>
-                      <a href={`tel:${p.phone}`} className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-success/15 flex items-center justify-center">
-                        <i className="fas fa-phone text-success text-xs sm:text-sm"></i>
-                      </a>
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-warn/15 flex items-center justify-center"><i className="fas fa-pills text-warn text-sm sm:text-base"></i></div>
+                      <div className="flex-1"><p className="text-xs sm:text-sm font-semibold">{p.name}</p><p className="text-[10px] sm:text-xs text-zinc-400">{p.online ? '🟢 En ligne' : '🔴 Hors ligne'}</p></div>
+                      <a href={`tel:${p.phone}`} className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-success/15 flex items-center justify-center"><i className="fas fa-phone text-success text-xs sm:text-sm"></i></a>
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {pharmTab === 'orders' && (
+              <div className="space-y-2 sm:space-y-3 mb-3 sm:mb-4">
+                {orders.length === 0 ? (
+                  <div className="card p-8 text-center"><i className="fas fa-shopping-bag text-3xl text-zinc-700 mb-2"></i><p className="text-zinc-500 text-sm">Aucune commande passée</p><p className="text-zinc-600 text-xs mt-2">Vos commandes apparaîtront ici</p></div>
+                ) : (
+                  orders.map(order => (
+                    <div key={order.id} className="card p-3 sm:p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs sm:text-sm font-semibold">Commande #{order.id}</p>
+                        <span className={`badge ${order.statut === 'DELIVERED' ? 'bg-success/20 text-success' : order.statut === 'CONFIRMED' ? 'bg-info/20 text-info' : order.statut === 'PREPARED' ? 'bg-warn/20 text-warn' : order.statut === 'EN_LIVRAISON' ? 'bg-purple-500/20 text-purple-400' : order.statut === 'CANCELLED' ? 'bg-danger/20 text-danger' : 'bg-zinc-700 text-zinc-400'}`}>
+                          {order.statut === 'DELIVERED' ? 'Livrée' : order.statut === 'CONFIRMED' ? 'Confirmée' : order.statut === 'PREPARED' ? 'Préparée' : order.statut === 'EN_LIVRAISON' ? 'En livraison' : order.statut === 'CANCELLED' ? 'Annulée' : order.statut}
+                        </span>
+                      </div>
+                      <p className="text-[10px] sm:text-xs text-zinc-400">{new Date(order.date_commande).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                      <div className="mt-2 space-y-1">
+                        {order.CommandeDetails?.map((detail: any) => (
+                          <div key={detail.id} className="flex justify-between items-center"><p className="text-[10px] sm:text-xs text-zinc-400">{detail.Medicament?.nom} × {detail.quantite}</p><p className="text-[10px] sm:text-xs text-info">{formatPrice(detail.prix_unitaire * detail.quantite)}</p></div>
+                        ))}
+                      </div>
+                      <div className="border-t border-zinc-800 mt-2 pt-2 flex justify-between items-center"><p className="text-xs text-zinc-400">Total</p><p className="text-sm sm:text-base font-bold text-info">{formatPrice(order.montant_total)}</p></div>
+                      {order.adresse_livraison && <p className="text-[9px] sm:text-[10px] text-zinc-500 mt-2"><i className="fas fa-map-marker-alt mr-1"></i>{order.adresse_livraison}</p>}
+                    </div>
+                  ))
+                )}
               </div>
             )}
           </div>
@@ -947,7 +1307,6 @@ const renderMapMarkers = (filter: string) => {
               <button className={`tab-btn ${wellnessTab === 'articles' ? 'active' : ''}`} onClick={() => setWellnessTab('articles')}>Articles</button>
               <button className={`tab-btn ${wellnessTab === 'stats' ? 'active' : ''}`} onClick={() => setWellnessTab('stats')}>Statistiques</button>
             </div>
-            
             <div>
               {wellnessTab === 'femme' && renderFemmeTab()}
               {wellnessTab === 'homme' && renderHommeTab()}
@@ -963,40 +1322,18 @@ const renderMapMarkers = (filter: string) => {
           <div className="px-4 sm:px-5 pt-3 sm:pt-4">
             <h2 className="text-lg sm:text-xl font-bold mb-4 sm:mb-6">Mon profil</h2>
             <div className="flex flex-col items-center mb-4 sm:mb-6">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-danger to-orange-500 flex items-center justify-center text-xl sm:text-2xl font-bold mb-2 sm:mb-3">
-                {user?.prenom?.[0] || user?.nom?.[0] || 'P'}
-              </div>
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-danger to-orange-500 flex items-center justify-center text-xl sm:text-2xl font-bold mb-2 sm:mb-3">{user?.prenom?.[0] || user?.nom?.[0] || 'P'}</div>
               <p className="font-semibold text-base sm:text-lg">{user?.prenom} {user?.nom}</p>
               <p className="text-zinc-400 text-xs sm:text-sm">{user?.email || user?.telephone}</p>
               <span className="badge bg-info/20 text-info mt-1 sm:mt-2 text-[10px] sm:text-xs">{user?.role}</span>
             </div>
-            
             <div className="space-y-2 mb-4 sm:mb-6">
-              <div className="card p-3 sm:p-4 flex items-center gap-3 sm:gap-4">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-danger/15 flex items-center justify-center">
-                  <i className="fas fa-tint text-danger text-xs sm:text-sm"></i>
-                </div>
-                <div><p className="text-xs sm:text-sm font-medium">Groupe sanguin</p><p className="text-[10px] sm:text-xs text-zinc-400">{user?.groupe_sanguin || 'A+'}</p></div>
-              </div>
-              <div className="card p-3 sm:p-4 flex items-center gap-3 sm:gap-4">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-info/15 flex items-center justify-center">
-                  <i className="fas fa-phone text-info text-xs sm:text-sm"></i>
-                </div>
-                <div><p className="text-xs sm:text-sm font-medium">Téléphone</p><p className="text-[10px] sm:text-xs text-zinc-400">{user?.telephone}</p></div>
-              </div>
+              <div className="card p-3 sm:p-4 flex items-center gap-3 sm:gap-4"><div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-danger/15 flex items-center justify-center"><i className="fas fa-tint text-danger text-xs sm:text-sm"></i></div><div><p className="text-xs sm:text-sm font-medium">Groupe sanguin</p><p className="text-[10px] sm:text-xs text-zinc-400">{user?.groupe_sanguin || 'A+'}</p></div></div>
+              <div className="card p-3 sm:p-4 flex items-center gap-3 sm:gap-4"><div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-info/15 flex items-center justify-center"><i className="fas fa-phone text-info text-xs sm:text-sm"></i></div><div><p className="text-xs sm:text-sm font-medium">Téléphone</p><p className="text-[10px] sm:text-xs text-zinc-400">{user?.telephone}</p></div></div>
             </div>
-            
             <div className="space-y-2">
-              <button onClick={() => setShowNotifModal(true)} className="card p-3 sm:p-4 flex items-center gap-3 sm:gap-4 w-full text-left">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-warn/15 flex items-center justify-center"><i className="fas fa-bell text-warn text-xs sm:text-sm"></i></div>
-                <p className="text-xs sm:text-sm font-medium">Mes notifications</p>
-                <i className="fas fa-chevron-right text-zinc-600 ml-auto text-xs sm:text-sm"></i>
-              </button>
-              <button onClick={handleLogout} className="card p-3 sm:p-4 flex items-center gap-3 sm:gap-4 w-full text-left">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-danger/15 flex items-center justify-center"><i className="fas fa-sign-out-alt text-danger text-xs sm:text-sm"></i></div>
-                <p className="text-xs sm:text-sm font-medium">Déconnexion</p>
-                <i className="fas fa-chevron-right text-zinc-600 ml-auto text-xs sm:text-sm"></i>
-              </button>
+              <button onClick={() => setShowNotifModal(true)} className="card p-3 sm:p-4 flex items-center gap-3 sm:gap-4 w-full text-left"><div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-warn/15 flex items-center justify-center"><i className="fas fa-bell text-warn text-xs sm:text-sm"></i></div><p className="text-xs sm:text-sm font-medium">Mes notifications</p><i className="fas fa-chevron-right text-zinc-600 ml-auto text-xs sm:text-sm"></i></button>
+              <button onClick={handleLogout} className="card p-3 sm:p-4 flex items-center gap-3 sm:gap-4 w-full text-left"><div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-danger/15 flex items-center justify-center"><i className="fas fa-sign-out-alt text-danger text-xs sm:text-sm"></i></div><p className="text-xs sm:text-sm font-medium">Déconnexion</p><i className="fas fa-chevron-right text-zinc-600 ml-auto text-xs sm:text-sm"></i></button>
             </div>
           </div>
         )}
@@ -1004,97 +1341,30 @@ const renderMapMarkers = (filter: string) => {
         {/* Bottom Navigation */}
         <div className="bottom-nav">
           <div className="nav-inner flex items-center justify-around py-1 sm:py-2 px-2 sm:px-4">
-            <button className={`nav-item flex flex-col items-center gap-0.5 sm:gap-1 py-1 sm:py-2 px-2 sm:px-3 ${currentPage === 'home' ? 'active' : ''}`} onClick={() => setCurrentPage('home')}>
-              <i className="fas fa-home text-base sm:text-lg"></i>
-              <span className="text-[8px] sm:text-[10px]">Accueil</span>
-              <div className="nav-dot"></div>
-            </button>
-            <button className={`nav-item flex flex-col items-center gap-0.5 sm:gap-1 py-1 sm:py-2 px-2 sm:px-3 ${currentPage === 'urgence' ? 'active' : ''}`} onClick={() => setCurrentPage('urgence')}>
-              <i className="fas fa-ambulance text-base sm:text-lg"></i>
-              <span className="text-[8px] sm:text-[10px]">Urgence</span>
-              <div className="nav-dot"></div>
-            </button>
-            <button className={`nav-item flex flex-col items-center gap-0.5 sm:gap-1 py-1 sm:py-2 px-2 sm:px-3 ${currentPage === 'pharmacie' ? 'active' : ''}`} onClick={() => setCurrentPage('pharmacie')}>
-              <i className="fas fa-pills text-base sm:text-lg"></i>
-              <span className="text-[8px] sm:text-[10px]">Pharmacie</span>
-              <div className="nav-dot"></div>
-            </button>
-            <button className={`nav-item flex flex-col items-center gap-0.5 sm:gap-1 py-1 sm:py-2 px-2 sm:px-3 ${currentPage === 'bienetre' ? 'active' : ''}`} onClick={() => setCurrentPage('bienetre')}>
-              <i className="fas fa-heart text-base sm:text-lg"></i>
-              <span className="text-[8px] sm:text-[10px]">Bien-être</span>
-              <div className="nav-dot"></div>
-            </button>
-            <button className={`nav-item flex flex-col items-center gap-0.5 sm:gap-1 py-1 sm:py-2 px-2 sm:px-3 ${currentPage === 'profil' ? 'active' : ''}`} onClick={() => setCurrentPage('profil')}>
-              <i className="fas fa-user text-base sm:text-lg"></i>
-              <span className="text-[8px] sm:text-[10px]">Profil</span>
-              <div className="nav-dot"></div>
-            </button>
+            <button className={`nav-item flex flex-col items-center gap-0.5 sm:gap-1 py-1 sm:py-2 px-2 sm:px-3 ${currentPage === 'home' ? 'active' : ''}`} onClick={() => setCurrentPage('home')}><i className="fas fa-home text-base sm:text-lg"></i><span className="text-[8px] sm:text-[10px]">Accueil</span><div className="nav-dot"></div></button>
+            <button className={`nav-item flex flex-col items-center gap-0.5 sm:gap-1 py-1 sm:py-2 px-2 sm:px-3 ${currentPage === 'urgence' ? 'active' : ''}`} onClick={() => setCurrentPage('urgence')}><i className="fas fa-ambulance text-base sm:text-lg"></i><span className="text-[8px] sm:text-[10px]">Urgence</span><div className="nav-dot"></div></button>
+            <button className={`nav-item flex flex-col items-center gap-0.5 sm:gap-1 py-1 sm:py-2 px-2 sm:px-3 ${currentPage === 'pharmacie' ? 'active' : ''}`} onClick={() => setCurrentPage('pharmacie')}><i className="fas fa-pills text-base sm:text-lg"></i><span className="text-[8px] sm:text-[10px]">Pharmacie</span><div className="nav-dot"></div></button>
+            <button className={`nav-item flex flex-col items-center gap-0.5 sm:gap-1 py-1 sm:py-2 px-2 sm:px-3 ${currentPage === 'bienetre' ? 'active' : ''}`} onClick={() => setCurrentPage('bienetre')}><i className="fas fa-heart text-base sm:text-lg"></i><span className="text-[8px] sm:text-[10px]">Bien-être</span><div className="nav-dot"></div></button>
+            <button className={`nav-item flex flex-col items-center gap-0.5 sm:gap-1 py-1 sm:py-2 px-2 sm:px-3 ${currentPage === 'profil' ? 'active' : ''}`} onClick={() => setCurrentPage('profil')}><i className="fas fa-user text-base sm:text-lg"></i><span className="text-[8px] sm:text-[10px]">Profil</span><div className="nav-dot"></div></button>
           </div>
         </div>
       </div>
 
-      {/* SOS Modal */}
+      {/* Modals */}
       {showSOSModal && (
         <div className="modal-overlay" onClick={() => setShowSOSModal(false)}>
           <div className="modal-content p-4 sm:p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4 sm:mb-6">
-              <h3 className="text-base sm:text-lg font-bold text-danger"><i className="fas fa-exclamation-triangle mr-2"></i>Alerte d'urgence</h3>
-              <button onClick={() => setShowSOSModal(false)} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-zinc-800 flex items-center justify-center">
-                <i className="fas fa-times text-zinc-400 text-xs sm:text-sm"></i>
-              </button>
-            </div>
-            
+            <div className="flex items-center justify-between mb-4 sm:mb-6"><h3 className="text-base sm:text-lg font-bold text-danger"><i className="fas fa-exclamation-triangle mr-2"></i>Alerte d'urgence</h3><button onClick={() => setShowSOSModal(false)} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-zinc-800 flex items-center justify-center"><i className="fas fa-times text-zinc-400 text-xs sm:text-sm"></i></button></div>
             {isOnline ? (
               <>
-                <div className="p-3 sm:p-4 rounded-xl bg-danger/10 border border-danger/20 mb-3 sm:mb-4">
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    <i className="fas fa-wifi text-success text-sm"></i>
-                    <div><p className="text-xs sm:text-sm font-semibold">Mode en ligne</p><p className="text-[10px] sm:text-xs text-zinc-400">GPS capturé — Alertes automatiques</p></div>
-                  </div>
-                </div>
-                <div className="space-y-2 sm:space-y-3 mb-3 sm:mb-4">
-                  <div className="card p-3 sm:p-4">
-                    <p className="text-[10px] sm:text-xs text-zinc-500 mb-1">Position GPS</p>
-                    <p className="text-xs sm:text-sm font-mono">{TANA[0]}, {TANA[1]}</p>
-                  </div>
-                  <div>
-                    <label className="text-[10px] sm:text-xs text-zinc-400 mb-1 block">Type d'urgence</label>
-                    <select value={sosType} onChange={(e) => setSosType(e.target.value)} className="input-modern w-full px-4 py-3 rounded-xl text-white text-sm">
-                      <option>Accident</option><option>Malaise</option><option>Douleur aiguë</option><option>Problème cardiaque</option><option>Accouchement</option><option>Autre</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[10px] sm:text-xs text-zinc-400 mb-1 block">Description</label>
-                    <textarea value={sosDesc} onChange={(e) => setSosDesc(e.target.value)} rows={3} placeholder="Décrivez brièvement l'urgence..." className="input-modern w-full px-4 py-3 rounded-xl text-white text-sm"></textarea>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                  <button onClick={sendSOSOnline} className="bg-danger text-white py-2 sm:py-3 rounded-xl font-semibold text-xs sm:text-sm active:scale-95 transition">
-                    <i className="fas fa-paper-plane mr-1 sm:mr-2"></i>Envoyer alerte
-                  </button>
-                  <button onClick={bipCentre} className="bg-warn text-black py-2 sm:py-3 rounded-xl font-semibold text-xs sm:text-sm active:scale-95 transition">
-                    <i className="fas fa-phone mr-1 sm:mr-2"></i>BIP Centre
-                  </button>
-                </div>
+                <div className="p-3 sm:p-4 rounded-xl bg-danger/10 border border-danger/20 mb-3 sm:mb-4"><div className="flex items-center gap-2 sm:gap-3"><i className="fas fa-wifi text-success text-sm"></i><div><p className="text-xs sm:text-sm font-semibold">Mode en ligne</p><p className="text-[10px] sm:text-xs text-zinc-400">GPS capturé — Alertes automatiques</p></div></div></div>
+                <div className="space-y-2 sm:space-y-3 mb-3 sm:mb-4"><div className="card p-3 sm:p-4"><p className="text-[10px] sm:text-xs text-zinc-500 mb-1">Position GPS</p><p className="text-xs sm:text-sm font-mono">{TANA[0]}, {TANA[1]}</p></div><div><label className="text-[10px] sm:text-xs text-zinc-400 mb-1 block">Type d'urgence</label><select value={sosType} onChange={(e) => setSosType(e.target.value)} className="input-modern w-full px-4 py-3 rounded-xl text-white text-sm"><option>Accident</option><option>Malaise</option><option>Douleur aiguë</option><option>Problème cardiaque</option><option>Accouchement</option><option>Autre</option></select></div><div><label className="text-[10px] sm:text-xs text-zinc-400 mb-1 block">Description</label><textarea value={sosDesc} onChange={(e) => setSosDesc(e.target.value)} rows={3} placeholder="Décrivez brièvement l'urgence..." className="input-modern w-full px-4 py-3 rounded-xl text-white text-sm"></textarea></div></div>
+                <div className="grid grid-cols-2 gap-2 sm:gap-3"><button onClick={sendSOSOnline} className="bg-danger text-white py-2 sm:py-3 rounded-xl font-semibold text-xs sm:text-sm active:scale-95 transition"><i className="fas fa-paper-plane mr-1 sm:mr-2"></i>Envoyer alerte</button><button onClick={bipCentre} className="bg-warn text-black py-2 sm:py-3 rounded-xl font-semibold text-xs sm:text-sm active:scale-95 transition"><i className="fas fa-phone mr-1 sm:mr-2"></i>BIP Centre</button></div>
               </>
             ) : (
               <>
-                <div className="p-3 sm:p-4 rounded-xl bg-warn/10 border border-warn/20 mb-3 sm:mb-4">
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    <i className="fas fa-wifi-slash text-warn text-sm"></i>
-                    <div><p className="text-xs sm:text-sm font-semibold">Mode hors-ligne</p><p className="text-[10px] sm:text-xs text-zinc-400">Faites un BIP (appel court) au centre le plus proche</p></div>
-                  </div>
-                </div>
-                <div className="space-y-2 sm:space-y-3">
-                  {hospitals.slice(0, 3).map(h => (
-                    <a key={h.id} href={`tel:${h.telephone}`} className="card p-3 sm:p-4 flex items-center gap-3 sm:gap-4">
-                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-warn/15 flex items-center justify-center">
-                        <i className="fas fa-phone text-warn text-sm sm:text-base"></i>
-                      </div>
-                      <div><p className="text-xs sm:text-sm font-semibold">{h.nom}</p><p className="text-[10px] sm:text-xs text-zinc-400">BIP (appel court) puis raccrocher</p></div>
-                    </a>
-                  ))}
-                </div>
+                <div className="p-3 sm:p-4 rounded-xl bg-warn/10 border border-warn/20 mb-3 sm:mb-4"><div className="flex items-center gap-2 sm:gap-3"><i className="fas fa-wifi-slash text-warn text-sm"></i><div><p className="text-xs sm:text-sm font-semibold">Mode hors-ligne</p><p className="text-[10px] sm:text-xs text-zinc-400">Faites un BIP (appel court) au centre le plus proche</p></div></div></div>
+                <div className="space-y-2 sm:space-y-3">{hospitals.slice(0, 3).map(h => (<a key={h.id} href={`tel:${h.telephone}`} className="card p-3 sm:p-4 flex items-center gap-3 sm:gap-4"><div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-warn/15 flex items-center justify-center"><i className="fas fa-phone text-warn text-sm sm:text-base"></i></div><div><p className="text-xs sm:text-sm font-semibold">{h.nom}</p><p className="text-[10px] sm:text-xs text-zinc-400">BIP (appel court) puis raccrocher</p></div></a>))}</div>
                 <button onClick={() => setShowSOSModal(false)} className="w-full mt-3 sm:mt-4 py-2 sm:py-3 rounded-xl bg-zinc-800 text-zinc-300 font-semibold text-xs sm:text-sm">Fermer</button>
               </>
             )}
@@ -1102,140 +1372,42 @@ const renderMapMarkers = (filter: string) => {
         </div>
       )}
 
-      {/* Cart Modal */}
       {showCartModal && (
         <div className="modal-overlay" onClick={() => setShowCartModal(false)}>
           <div className="modal-content p-4 sm:p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4 sm:mb-6">
-              <h3 className="text-base sm:text-lg font-bold"><i className="fas fa-shopping-cart mr-2 text-info"></i>Mon panier</h3>
-              <button onClick={() => setShowCartModal(false)} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-zinc-800 flex items-center justify-center">
-                <i className="fas fa-times text-zinc-400 text-xs sm:text-sm"></i>
-              </button>
-            </div>
-            
-            {cart.length === 0 ? (
-              <div className="text-center py-6 sm:py-8">
-                <i className="fas fa-shopping-cart text-2xl sm:text-3xl text-zinc-700 mb-2 sm:mb-3"></i>
-                <p className="text-zinc-500 text-xs sm:text-sm">Votre panier est vide</p>
-              </div>
-            ) : (
+            <div className="flex items-center justify-between mb-4 sm:mb-6"><h3 className="text-base sm:text-lg font-bold"><i className="fas fa-shopping-cart mr-2 text-info"></i>Mon panier</h3><button onClick={() => setShowCartModal(false)} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-zinc-800 flex items-center justify-center"><i className="fas fa-times text-zinc-400 text-xs sm:text-sm"></i></button></div>
+            {cart.length === 0 ? (<div className="text-center py-6 sm:py-8"><i className="fas fa-shopping-cart text-2xl sm:text-3xl text-zinc-700 mb-2 sm:mb-3"></i><p className="text-zinc-500 text-xs sm:text-sm">Votre panier est vide</p></div>) : (
               <>
-                <div className="space-y-2 sm:space-y-3 mb-3 sm:mb-4">
-                  {cart.map(c => (
-                    <div key={c.medicament_id} className="flex items-center gap-2 sm:gap-3">
-                      <div className="flex-1">
-                        <p className="text-xs sm:text-sm font-medium">{c.nom}</p>
-                        <p className="text-[10px] sm:text-xs text-zinc-400">{formatPrice(c.prix)} × {c.quantite}</p>
-                      </div>
-                      <div className="flex items-center gap-1 sm:gap-2">
-                        <button onClick={() => updateCartQty(c.medicament_id, -1)} className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-zinc-800 flex items-center justify-center text-[10px] sm:text-xs">−</button>
-                        <span className="text-xs sm:text-sm font-bold w-4 sm:w-5 text-center">{c.quantite}</span>
-                        <button onClick={() => updateCartQty(c.medicament_id, 1)} className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-zinc-800 flex items-center justify-center text-[10px] sm:text-xs">+</button>
-                      </div>
-                      <button onClick={() => removeFromCart(c.medicament_id)} className="text-zinc-600 hover:text-danger transition">
-                        <i className="fas fa-trash text-[10px] sm:text-xs"></i>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="border-t border-zinc-800 pt-3 sm:pt-4">
-                  <div className="flex justify-between mb-3 sm:mb-4">
-                    <span className="text-zinc-400 text-xs sm:text-sm">Total</span>
-                    <span className="text-base sm:text-xl font-bold">{formatPrice(cart.reduce((a, b) => a + b.prix * b.quantite, 0))}</span>
-                  </div>
-                  <div className="mb-2 sm:mb-3">
-                    <label className="text-[10px] sm:text-xs text-zinc-400 mb-1 block">Adresse de livraison</label>
-                    <input type="text" value={deliveryAddr} onChange={(e) => setDeliveryAddr(e.target.value)} className="input-modern w-full px-4 py-3 rounded-xl text-white text-sm" />
-                  </div>
-                  <button onClick={placeOrder} className="w-full bg-info text-white py-2 sm:py-3 rounded-xl font-semibold text-xs sm:text-sm active:scale-95 transition">
-                    <i className="fas fa-check mr-1 sm:mr-2"></i>Confirmer la commande
-                  </button>
-                </div>
+                <div className="space-y-2 sm:space-y-3 mb-3 sm:mb-4">{cart.map(c => (<div key={c.medicament_id} className="flex items-center gap-2 sm:gap-3"><div className="flex-1"><p className="text-xs sm:text-sm font-medium">{c.nom}</p><p className="text-[10px] sm:text-xs text-zinc-400">{formatPrice(c.prix)} × {c.quantite}</p></div><div className="flex items-center gap-1 sm:gap-2"><button onClick={() => updateCartQty(c.medicament_id, -1)} className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-zinc-800 flex items-center justify-center text-[10px] sm:text-xs">−</button><span className="text-xs sm:text-sm font-bold w-4 sm:w-5 text-center">{c.quantite}</span><button onClick={() => updateCartQty(c.medicament_id, 1)} className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-zinc-800 flex items-center justify-center text-[10px] sm:text-xs">+</button></div><button onClick={() => removeFromCart(c.medicament_id)} className="text-zinc-600 hover:text-danger transition"><i className="fas fa-trash text-[10px] sm:text-xs"></i></button></div>))}</div>
+                <div className="border-t border-zinc-800 pt-3 sm:pt-4"><div className="flex justify-between mb-3 sm:mb-4"><span className="text-zinc-400 text-xs sm:text-sm">Total</span><span className="text-base sm:text-xl font-bold">{formatPrice(cart.reduce((a, b) => a + b.prix * b.quantite, 0))}</span></div><div className="mb-2 sm:mb-3"><label className="text-[10px] sm:text-xs text-zinc-400 mb-1 block">Adresse de livraison</label><input type="text" value={deliveryAddr} onChange={(e) => setDeliveryAddr(e.target.value)} className="input-modern w-full px-4 py-3 rounded-xl text-white text-sm" /></div><button onClick={placeOrder} className="w-full bg-info text-white py-2 sm:py-3 rounded-xl font-semibold text-xs sm:text-sm active:scale-95 transition"><i className="fas fa-check mr-1 sm:mr-2"></i>Confirmer la commande</button></div>
               </>
             )}
           </div>
         </div>
       )}
 
-      {/* Notifications Modal */}
       {showNotifModal && (
         <div className="modal-overlay" onClick={() => setShowNotifModal(false)}>
           <div className="modal-content p-4 sm:p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4 sm:mb-6">
-              <h3 className="text-base sm:text-lg font-bold"><i className="fas fa-bell mr-2 text-warn"></i>Notifications</h3>
-              <button onClick={() => setShowNotifModal(false)} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-zinc-800 flex items-center justify-center">
-                <i className="fas fa-times text-zinc-400 text-xs sm:text-sm"></i>
-              </button>
-            </div>
+            <div className="flex items-center justify-between mb-4 sm:mb-6"><h3 className="text-base sm:text-lg font-bold"><i className="fas fa-bell mr-2 text-warn"></i>Notifications</h3><button onClick={() => setShowNotifModal(false)} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-zinc-800 flex items-center justify-center"><i className="fas fa-times text-zinc-400 text-xs sm:text-sm"></i></button></div>
             <div className="space-y-2 sm:space-y-3">
-              {notifications.length === 0 ? (
-                <p className="text-center text-zinc-500 text-xs sm:text-sm py-3 sm:py-4">Aucune notification</p>
-              ) : (
-                notifications.map(n => {
-                  const icons: { [key: string]: string } = {
-                    PERIOD_REMINDER: 'fa-calendar-alt text-pink-400',
-                    VACCINATION: 'fa-syringe text-info',
-                    MOOD_ALERT: 'fa-smile text-success',
-                    EMERGENCY_UPDATE: 'fa-exclamation-triangle text-danger',
-                    ORDER_STATUS: 'fa-shopping-bag text-info',
-                    GENERAL: 'fa-info-circle text-zinc-400',
-                    MEDICAL_REMINDER: 'fa-pills text-warn'
-                  };
-                  const ic = icons[n.type] || icons.GENERAL;
-                  return (
-                    <div key={n.id} className={`flex items-start gap-2 sm:gap-3 p-2 sm:p-3 rounded-xl ${n.lu ? 'bg-zinc-900/50' : 'bg-zinc-800/80 border border-zinc-700'}`}>
-                      <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-zinc-800 flex items-center justify-center shrink-0 mt-0.5">
-                        <i className={`fas ${ic} text-[10px] sm:text-sm`}></i>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-xs sm:text-sm font-semibold ${n.lu ? 'text-zinc-400' : ''}`}>{n.titre}</p>
-                        <p className="text-[10px] sm:text-xs text-zinc-500 mt-0.5">{n.message}</p>
-                        <p className="text-[8px] sm:text-[10px] text-zinc-600 mt-0.5 sm:mt-1">{timeAgo(new Date(n.date_creation))}</p>
-                      </div>
-                      {!n.lu && <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-danger mt-1 sm:mt-2 shrink-0"></div>}
-                    </div>
-                  );
-                })
-              )}
+              {notifications.length === 0 ? (<p className="text-center text-zinc-500 text-xs sm:text-sm py-3 sm:py-4">Aucune notification</p>) : (notifications.map(n => { const icons: { [key: string]: string } = { PERIOD_REMINDER: 'fa-calendar-alt text-pink-400', VACCINATION: 'fa-syringe text-info', MOOD_ALERT: 'fa-smile text-success', EMERGENCY_UPDATE: 'fa-exclamation-triangle text-danger', ORDER_STATUS: 'fa-shopping-bag text-info', GENERAL: 'fa-info-circle text-zinc-400', MEDICAL_REMINDER: 'fa-pills text-warn' }; const ic = icons[n.type] || icons.GENERAL; return (<div key={n.id} className={`flex items-start gap-2 sm:gap-3 p-2 sm:p-3 rounded-xl ${n.lu ? 'bg-zinc-900/50' : 'bg-zinc-800/80 border border-zinc-700'}`}><div className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-zinc-800 flex items-center justify-center shrink-0 mt-0.5"><i className={`fas ${ic} text-[10px] sm:text-sm`}></i></div><div className="flex-1 min-w-0"><p className={`text-xs sm:text-sm font-semibold ${n.lu ? 'text-zinc-400' : ''}`}>{n.titre}</p><p className="text-[10px] sm:text-xs text-zinc-500 mt-0.5">{n.message}</p><p className="text-[8px] sm:text-[10px] text-zinc-600 mt-0.5 sm:mt-1">{timeAgo(new Date(n.date_creation))}</p></div>{!n.lu && <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-danger mt-1 sm:mt-2 shrink-0"></div>}</div>); }))}
             </div>
           </div>
         </div>
       )}
 
-      {/* Chatbot Modal */}
       {showChatModal && (
         <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950">
-          <div className="glass px-3 sm:px-4 py-2 sm:py-3 flex items-center gap-2 sm:gap-3">
-            <button onClick={() => setShowChatModal(false)} className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-zinc-800 flex items-center justify-center">
-              <i className="fas fa-arrow-left text-zinc-400 text-xs sm:text-sm"></i>
-            </button>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-purple-500/20 flex items-center justify-center">
-              <i className="fas fa-robot text-purple-400 text-xs sm:text-sm"></i>
-            </div>
-            <div><p className="text-xs sm:text-sm font-semibold">MindTrack</p><p className="text-[8px] sm:text-[10px] text-success">En ligne</p></div>
-          </div>
-          <div ref={chatMessagesRef} className="flex-1 overflow-y-auto p-3 sm:p-4 flex flex-col gap-2 sm:gap-3">
-            {chatMessages.map((m, i) => (
-              <div key={i} className={`chat-bubble ${m.from === 'bot' ? 'chat-bot' : 'chat-user'} text-xs sm:text-sm`}>
-                {m.text}
-              </div>
-            ))}
-          </div>
-          <div className="p-3 sm:p-4 border-t border-zinc-800 flex items-center gap-2">
-            <input
-              type="text"
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && sendChat()}
-              placeholder="Écrivez votre message..."
-              className="flex-1 input-modern px-4 py-3 rounded-xl text-white text-sm"
-            />
-            <button onClick={sendChat} className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-purple-500 flex items-center justify-center active:scale-90 transition">
-              <i className="fas fa-paper-plane text-white text-xs sm:text-sm"></i>
-            </button>
-          </div>
+          <div className="glass px-3 sm:px-4 py-2 sm:py-3 flex items-center gap-2 sm:gap-3"><button onClick={() => setShowChatModal(false)} className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-zinc-800 flex items-center justify-center"><i className="fas fa-arrow-left text-zinc-400 text-xs sm:text-sm"></i></button><div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-purple-500/20 flex items-center justify-center"><i className="fas fa-robot text-purple-400 text-xs sm:text-sm"></i></div><div><p className="text-xs sm:text-sm font-semibold">MindTrack</p><p className="text-[8px] sm:text-[10px] text-success">En ligne</p></div></div>
+          <div ref={chatMessagesRef} className="flex-1 overflow-y-auto p-3 sm:p-4 flex flex-col gap-2 sm:gap-3">{chatMessages.map((m, i) => (<div key={i} className={`chat-bubble ${m.from === 'bot' ? 'chat-bot' : 'chat-user'} text-xs sm:text-sm`}>{m.text}</div>))}</div>
+          <div className="p-3 sm:p-4 border-t border-zinc-800 flex items-center gap-2"><input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && sendChat()} placeholder="Écrivez votre message..." className="flex-1 input-modern px-4 py-3 rounded-xl text-white text-sm" /><button onClick={sendChat} className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-purple-500 flex items-center justify-center active:scale-90 transition"><i className="fas fa-paper-plane text-white text-xs sm:text-sm"></i></button></div>
         </div>
       )}
+
+      {showAddPregnancyModal && renderAddPregnancyModal()}
+      {showAddPSAModal && renderAddPSAModal()}
+      {showAddActiviteModal && renderAddActiviteModal()}
     </div>
   );
 };
