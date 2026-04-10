@@ -12,81 +12,104 @@ import Loading from '../components/common/Loading';
 
 const TANA: [number, number] = [-18.8792, 47.5200];
 
+// Interfaces alignées avec les types de l'API
 interface Medicine {
   id: number;
-  name: string;
-  desc: string;
-  cat: string;
-  price: number;
+  nom: string;
+  description?: string;
+  categorie: string;
+  prix: number;
   stock: number;
-  rx: boolean;
+  necessite_ordonnance: boolean;
+  pharmacien_id?: number;
+  Pharmacien?: { nom_pharmacie: string };
+  date_ajout?: string;
 }
 
 interface Ambulance {
   id: number;
-  name: string;
-  lat: number;
-  lng: number;
-  status: string;
-  driver: string;
-  phone: string;
+  nom: string;
+  matricule?: string;
+  telephone: string;
+  statut: string;
+  zone_couverture?: string;
+  mot_de_passe_hash?: string;
+  position_gps?: string;
+  urgence_active_id?: number;
 }
 
 interface Hospital {
   id: number;
-  name: string;
-  lat: number;
-  lng: number;
-  phone: string;
-  capacity: number;
-  emergency: boolean;
+  nom: string;
+  type?: string;
+  telephone?: string;
+  adresse?: string;
+  latitude?: number;
+  longitude?: number;
+  capacite_lits?: number;
+  urgences_24_7?: boolean;
 }
 
 interface Pharmacy {
   id: number;
-  name: string;
-  lat: number;
-  lng: number;
-  phone: string;
-  online: boolean;
-  delivery: boolean;
+  nom_pharmacie: string;
+  responsable: string;
+  telephone: string;
+  email?: string;
+  adresse?: string;
+  statut: string;
+  livraison_disponible: boolean;
+  latitude?: number;
+  longitude?: number;
+  horaires_ouverture?: string;
 }
 
 interface User {
   id: number;
-  email: string;
-  name: string;
-  phone: string;
+  email?: string;
+  nom?: string;
+  prenom?: string;
+  telephone: string;
   role: string;
-  gender: string;
-  blood: string;
-  active: boolean;
-  created: string;
+  sexe?: string;
+  groupe_sanguin?: string;
+  statut: string;
+  date_inscription?: string;
+  active?: boolean;
 }
 
 interface Order {
   id: number;
-  user: string;
-  items: { name: string; qty: number }[];
-  total: number;
-  status: string;
-  date: string;
-  pharmacy: string;
+  Patient?: { nom: string; prenom: string };
+  Pharmacien?: { nom_pharmacie: string };
+  date_commande: string;
+  montant_total: number;
+  statut: string;
+  adresse_livraison?: string;
+  mode_paiement?: string;
+  ordonnance_url?: string;
+  CommandeDetails?: Array<{
+    id: number;
+    quantite: number;
+    prix_unitaire: number;
+    Medicament?: { nom: string };
+  }>;
 }
 
 interface Emergency {
   id: number;
-  patient: string;
-  type: string;
-  severity: string;
-  status: string;
-  time: string;
-  location: string;
-  phone: string;
-  assigned: string | null;
+  Patient?: { nom: string; prenom: string; telephone: string };
+  type_urgence?: string;
+  niveau_priorite?: string;
+  localisation?: string;
+  statut: string;
+  date_alerte: string;
+  Ambulancier?: { nom: string };
+  latitude?: number;
+  longitude?: number;
+  description?: string;
+  centre_sante_id?: number;
 }
-
-
 
 const AdminPage: React.FC = () => {
   const navigate = useNavigate();
@@ -104,59 +127,17 @@ const AdminPage: React.FC = () => {
   const [showHospitalModal, setShowHospitalModal] = useState(false);
   const [showPharmacyModal, setShowPharmacyModal] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<any>(null);
   
-  // Data
-  const [medicines, setMedicines] = useState<Medicine[]>([
-    { id: 1, name: 'Paracétamol 500mg', desc: 'Antalgique fébrifuge', cat: 'Antalgique', price: 5000, stock: 45, rx: false },
-    { id: 2, name: 'Amoxicilline 500mg', desc: 'Antibiotique large spectre', cat: 'Antibiotique', price: 8000, stock: 12, rx: true },
-    { id: 3, name: 'Ibuprofène 400mg', desc: 'Anti-inflammatoire', cat: 'AINS', price: 6000, stock: 78, rx: false },
-    { id: 4, name: 'Doliprane 1000mg', desc: 'Antalgique fort', cat: 'Antalgique', price: 7000, stock: 120, rx: false },
-    { id: 5, name: 'Aspirine 100mg', desc: 'Anticoagulant', cat: 'Cardiovasculaire', price: 4000, stock: 200, rx: false },
-    { id: 6, name: 'Oméprazole 20mg', desc: 'Anti-ulcéreux', cat: 'Gastro', price: 6500, stock: 8, rx: true },
-    { id: 7, name: 'Azithromycine 250mg', desc: 'Antibiotique', cat: 'Antibiotique', price: 12000, stock: 5, rx: true },
-    { id: 8, name: 'Vitamine C 500mg', desc: 'Supplément', cat: 'Vitamines', price: 3500, stock: 150, rx: false },
-    { id: 9, name: 'Vitamine B 500mg', desc: 'Supplément', cat: 'Vitamines', price: 3500, stock: 15000000, rx: false }
-]);
-  
-  const [ambulances, setAmbulances] = useState<Ambulance[]>([
-    { id: 1, name: 'AMB-001', lat: -18.8800, lng: 47.5180, status: 'DISPONIBLE', driver: 'Rakoto P.', phone: '+261 34 12 345 67' },
-    { id: 2, name: 'AMB-002', lat: -18.8750, lng: 47.5250, status: 'DISPONIBLE', driver: 'Razafy M.', phone: '+261 34 23 456 78' },
-    { id: 3, name: 'AMB-003', lat: -18.8900, lng: 47.5100, status: 'EN_INTERVENTION', driver: 'Andry T.', phone: '+261 34 34 567 89' },
-    { id: 4, name: 'AMB-004', lat: -18.8700, lng: 47.5350, status: 'DISPONIBLE', driver: 'Hasina V.', phone: '+261 34 45 678 90' },
-    { id: 5, name: 'AMB-005', lat: -18.8950, lng: 47.5250, status: 'DISPONIBLE', driver: 'Naina R.', phone: '+261 34 56 789 01' }
-  ]);
-  
-  const [hospitals, setHospitals] = useState<Hospital[]>([
-    { id: 1, name: 'CHU HJRA', lat: -18.8850, lng: 47.5150, phone: '+261 20 22 326 19', capacity: 500, emergency: true },
-    { id: 2, name: 'CHU Androva', lat: -18.8720, lng: 47.5080, phone: '+261 20 22 412 68', capacity: 350, emergency: true },
-    { id: 3, name: 'Clinique MMN', lat: -18.8900, lng: 47.5300, phone: '+261 20 22 632 00', capacity: 150, emergency: true },
-    { id: 4, name: 'CSB Anosy', lat: -18.8850, lng: 47.5100, phone: '+261 20 22 445 56', capacity: 80, emergency: false }
-  ]);
-  
-  const [pharmacies, setPharmacies] = useState<Pharmacy[]>([
-    { id: 1, name: 'Pharmacie Central Tana', lat: -18.8792, lng: 47.5200, phone: '+261 20 22 123 45', online: true, delivery: true },
-    { id: 2, name: 'Pharmacie Ville', lat: -18.8800, lng: 47.5300, phone: '+261 20 22 234 56', online: true, delivery: true },
-    { id: 3, name: 'Pharmacie Anosy', lat: -18.8850, lng: 47.5100, phone: '+261 20 22 345 67', online: false, delivery: false }
-  ]);
-  
-  const [users, setUsers] = useState<User[]>([
-    { id: 1, email: 'patient@miaina.mg', name: 'Rakoto Marie', phone: '+261 34 00 123 45', role: 'PATIENT', gender: 'FEMININ', blood: 'A+', active: true, created: '2024-01-15' },
-    { id: 2, email: 'homme@miaina.mg', name: 'Razafi Jean', phone: '+261 34 00 678 90', role: 'PATIENT', gender: 'MASCULIN', blood: 'O+', active: true, created: '2024-02-20' },
-    { id: 3, email: 'admin@miaina.mg', name: 'Admin System', phone: '+261 34 00 000 01', role: 'ADMIN', gender: 'MASCULIN', blood: 'B+', active: true, created: '2024-01-01' }
-  ]);
-  
-  const [orders, setOrders] = useState<Order[]>([
-    { id: 101, user: 'Rakoto Marie', items: [{ name: 'Paracétamol 500mg', qty: 2 }], total: 10000, status: 'DELIVERED', date: '2024-12-10', pharmacy: 'Pharmacie Central Tana' },
-    { id: 102, user: 'Razafi Jean', items: [{ name: 'Amoxicilline 500mg', qty: 1 }], total: 8000, status: 'CONFIRMED', date: '2024-12-12', pharmacy: 'Pharmacie Ville' },
-    { id: 103, user: 'Rakoto Marie', items: [{ name: 'Vitamine C', qty: 3 }], total: 10500, status: 'PREPARED', date: '2024-12-13', pharmacy: 'Pharmacie Central Tana' }
-  ]);
-  
-  const [emergencies, setEmergencies] = useState<Emergency[]>([
-    { id: 1, patient: 'Rakoto Marie', type: 'Accident', severity: 'CRITIQUE', status: 'IN_PROGRESS', time: '14:23', location: 'Analakely', phone: '+261 34 00 123 45', assigned: 'AMB-001' },
-    { id: 2, patient: 'Razafi Jean', type: 'Malaise', severity: 'MOYEN', status: 'ASSIGNED', time: '14:45', location: 'Isotry', phone: '+261 34 00 678 90', assigned: 'AMB-002' },
-    { id: 3, patient: 'Andry Solo', type: 'Douleur aiguë', severity: 'ÉLEVÉ', status: 'PENDING', time: '15:02', location: '67ha', phone: '+261 34 11 111 11', assigned: null },
-    { id: 4, patient: 'Hasina Voara', type: 'Accouchement', severity: 'CRITIQUE', status: 'RESOLVED', time: '13:30', location: 'Anosy', phone: '+261 34 22 222 22', assigned: 'AMB-003' }
-  ]);
+  // Data - Initialisés vides pour charger depuis l'API
+  const [medicines, setMedicines] = useState<Medicine[]>([]);
+  const [ambulances, setAmbulances] = useState<Ambulance[]>([]);
+  const [hospitals, setHospitals] = useState<Hospital[]>([]);
+  const [pharmacies, setPharmacies] = useState<Pharmacy[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [emergencies, setEmergencies] = useState<Emergency[]>([]);
+  const [stats, setStats] = useState<any>({});
   
   // Filters
   const [stockCategoryFilter, setStockCategoryFilter] = useState('ALL');
@@ -168,52 +149,415 @@ const AdminPage: React.FC = () => {
   const adminMapRef = useRef<L.Map | null>(null);
   const chartRefs = useRef<{ [key: string]: Chart | null }>({});
 
-  useEffect(() => {
-    if (user) {
-      socketService.connect(localStorage.getItem('token') || '');
-      socketService.joinRoom('admin');
-      socketService.onNewEmergency(handleNewEmergency);
-      socketService.onNewBIP(handleNewBIP);
+  // ==================== FONCTIONS DE CHARGEMENT API ====================
+  
+  const loadStats = async () => {
+    try {
+      const data = await adminService.getStats();
+      setStats(data);
+    } catch (error) {
+      console.error('Erreur chargement stats:', error);
+    }
+  };
+
+  const loadMedicines = async () => {
+    try {
+      setLoading(true);
+      const data = await adminService.getMedicaments();
+      setMedicines(data as Medicine[]);
+    } catch (error) {
+      console.error('Erreur chargement médicaments:', error);
+      showToast('Erreur chargement des médicaments', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadAmbulances = async () => {
+    try {
+      const data = await adminService.getAmbulances();
+      setAmbulances(data as Ambulance[]);
+    } catch (error) {
+      console.error('Erreur chargement ambulances:', error);
+      showToast('Erreur chargement des ambulances', 'error');
+    }
+  };
+
+  const loadHospitals = async () => {
+    try {
+      const data = await adminService.getCentresSante();
+      setHospitals(data as Hospital[]);
+    } catch (error) {
+      console.error('Erreur chargement hôpitaux:', error);
+    }
+  };
+
+  const loadPharmacies = async () => {
+    try {
+      const data = await adminService.getPharmacies();
+      setPharmacies(data as Pharmacy[]);
+    } catch (error) {
+      console.error('Erreur chargement pharmacies:', error);
+      showToast('Erreur chargement des pharmacies', 'error');
+    }
+  };
+
+  const loadUsers = async () => {
+    try {
+      const data = await adminService.getUsers();
+      const allUsers: User[] = [
+        ...(data.patients || []).map((p: any) => ({ ...p, role: 'PATIENT', nom: p.nom, prenom: p.prenom, statut: p.statut || 'ACTIF' })),
+        ...(data.ambulanciers || []).map((a: any) => ({ ...a, role: 'AMBULANCIER', nom: a.nom, statut: a.statut === 'DISPONIBLE' ? 'ACTIF' : 'INACTIF' })),
+        ...(data.pharmaciens || []).map((ph: any) => ({ ...ph, role: 'PHARMACIEN', nom: ph.nom_pharmacie, statut: ph.statut })),
+        ...(data.admins || []).map((a: any) => ({ ...a, role: 'ADMIN', nom: a.nom, prenom: a.prenom, statut: a.statut }))
+      ];
+      setUsers(allUsers);
+    } catch (error) {
+      console.error('Erreur chargement utilisateurs:', error);
+    }
+  };
+
+  const loadOrders = async () => {
+    try {
+      const data = await adminService.getOrders();
+      setOrders(data as Order[]);
+    } catch (error) {
+      console.error('Erreur chargement commandes:', error);
+    }
+  };
+
+  const loadEmergencies = async () => {
+    try {
+      const data = await adminService.getEmergencies();
+      setEmergencies(data as Emergency[]);
+    } catch (error) {
+      console.error('Erreur chargement urgences:', error);
+    }
+  };
+
+  const loadAllData = async () => {
+    setLoading(true);
+    await Promise.all([
+      loadStats(),
+      loadMedicines(),
+      loadAmbulances(),
+      loadHospitals(),
+      loadPharmacies(),
+      loadUsers(),
+      loadOrders(),
+      loadEmergencies()
+    ]);
+    setLoading(false);
+  };
+
+  // ==================== CRUD MÉDICAMENTS ====================
+  
+  const addMedicine = async () => {
+    const nom = (document.getElementById('medName') as HTMLInputElement)?.value.trim();
+    const categorie = (document.getElementById('medCategory') as HTMLSelectElement)?.value;
+    const description = (document.getElementById('medDesc') as HTMLTextAreaElement)?.value.trim();
+    const prix = parseFloat((document.getElementById('medPrice') as HTMLInputElement)?.value);
+    const stock = parseInt((document.getElementById('medStock') as HTMLInputElement)?.value);
+    const necessite_ordonnance = (document.getElementById('medRx') as HTMLInputElement)?.checked;
+    
+    if (!nom || !prix || isNaN(stock)) {
+      showToast('Veuillez remplir tous les champs obligatoires', 'error');
+      return;
     }
     
-    return () => {
-      socketService.off('new-emergency');
-      socketService.off('new-bip');
-    };
-  }, [user]);
+    try {
+      setLoading(true);
+      const result = await adminService.createMedicament({
+        nom, description: description || 'Nouveau médicament', categorie, prix, stock, necessite_ordonnance
+      });
+      
+      if (result.success) {
+        showToast('Médicament ajouté avec succès', 'success');
+        setShowMedicineModal(false);
+        await loadMedicines();
+        if (currentPage === 'stock') renderStock();
+      }
+    } catch (error) {
+      console.error('Erreur ajout médicament:', error);
+      showToast('Erreur lors de l\'ajout', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  useEffect(() => {
-    if (currentPage === 'ambulances') {
-      setTimeout(initAmbulanceMap, 100);
+  const updateMedicineStock = async (id: number, delta: number) => {
+    const medicine = medicines.find(m => m.id === id);
+    if (!medicine) return;
+    
+    const newStock = Math.max(0, medicine.stock + delta);
+    try {
+      const result = await adminService.updateMedicamentStock(id, newStock);
+      if (result.success) {
+        await loadMedicines();
+        if (newStock < 20) showToast(`⚠️ Stock faible: ${medicine.nom} (${newStock} restants)`, 'warn');
+        else showToast(`Stock mis à jour: ${medicine.nom}`, 'success');
+        if (currentPage === 'stock') renderStock();
+      }
+    } catch (error) {
+      console.error('Erreur mise à jour stock:', error);
+      showToast('Erreur lors de la mise à jour', 'error');
     }
-    if (currentPage === 'dashboard') {
-      setTimeout(renderCharts, 100);
+  };
+
+  const editMedicineStock = async (id: number) => {
+    const medicine = medicines.find(m => m.id === id);
+    if (!medicine) return;
+    
+    const newStock = prompt(`Nouveau stock pour ${medicine.nom}:`, medicine.stock.toString());
+    if (newStock !== null && !isNaN(parseInt(newStock))) {
+      try {
+        const result = await adminService.updateMedicamentStock(id, parseInt(newStock));
+        if (result.success) {
+          await loadMedicines();
+          showToast(`Stock de ${medicine.nom} mis à jour`, 'success');
+          if (currentPage === 'stock') renderStock();
+        }
+      } catch (error) {
+        console.error('Erreur modification stock:', error);
+        showToast('Erreur lors de la modification', 'error');
+      }
     }
-    if (currentPage === 'stock') {
-      renderStock();
+  };
+
+  // ==================== CRUD AMBULANCES ====================
+  
+  const addAmbulance = async () => {
+    const nom = (document.getElementById('ambName') as HTMLInputElement)?.value;
+    const telephone = (document.getElementById('ambPhone') as HTMLInputElement)?.value;
+    const matricule = (document.getElementById('ambMatricule') as HTMLInputElement)?.value;
+    const zone_couverture = (document.getElementById('ambZone') as HTMLSelectElement)?.value;
+    const mot_de_passe = (document.getElementById('ambPassword') as HTMLInputElement)?.value;
+    
+    if (!nom || !telephone) {
+      showToast('Veuillez remplir les champs obligatoires', 'error');
+      return;
     }
-  }, [currentPage, medicines, stockCategoryFilter, stockStatusFilter, stockSearch]);
+    
+    try {
+      setLoading(true);
+      const result = await adminService.createAmbulance({
+        nom, telephone, matricule, zone_couverture, mot_de_passe
+      });
+      
+      if (result.success) {
+        showToast(`Ambulance ${nom} ajoutée`, 'success');
+        setShowAmbulanceModal(false);
+        await loadAmbulances();
+        if (currentPage === 'ambulances') setTimeout(initAmbulanceMap, 100);
+      }
+    } catch (error) {
+      console.error('Erreur ajout ambulance:', error);
+      showToast('Erreur lors de l\'ajout', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleAmbulanceStatus = async (id: number, currentStatus: string) => {
+    const newStatus = currentStatus === 'DISPONIBLE' ? 'EN_INTERVENTION' : 'DISPONIBLE';
+    try {
+      const result = await adminService.updateAmbulanceStatus(id, newStatus);
+      if (result.success) {
+        await loadAmbulances();
+        showToast(`Ambulance mise à jour`, 'info');
+        if (currentPage === 'ambulances') setTimeout(initAmbulanceMap, 100);
+      }
+    } catch (error) {
+      console.error('Erreur mise à jour ambulance:', error);
+      showToast('Erreur lors de la mise à jour', 'error');
+    }
+  };
+
+  // ==================== CRUD PHARMACIES ====================
+  
+  const addPharmacy = async () => {
+    const nom_pharmacie = (document.getElementById('pharmName') as HTMLInputElement)?.value;
+    const responsable = (document.getElementById('pharmResp') as HTMLInputElement)?.value;
+    const telephone = (document.getElementById('pharmPhone') as HTMLInputElement)?.value;
+    const email = (document.getElementById('pharmEmail') as HTMLInputElement)?.value;
+    const adresse = (document.getElementById('pharmAddress') as HTMLInputElement)?.value;
+    const mot_de_passe = (document.getElementById('pharmPassword') as HTMLInputElement)?.value;
+    const livraison_disponible = (document.getElementById('pharmDelivery') as HTMLInputElement)?.checked;
+    
+    if (!nom_pharmacie || !telephone) {
+      showToast('Veuillez remplir les champs obligatoires', 'error');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      const result = await adminService.createPharmacie({
+        nom_pharmacie, responsable, telephone, email, adresse, mot_de_passe, livraison_disponible
+      });
+      
+      if (result.success) {
+        showToast(`${nom_pharmacie} ajoutée`, 'success');
+        setShowPharmacyModal(false);
+        await loadPharmacies();
+      }
+    } catch (error) {
+      console.error('Erreur ajout pharmacie:', error);
+      showToast('Erreur lors de l\'ajout', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const togglePharmacyStatus = async (id: number, currentStatus: string) => {
+    const newStatus = currentStatus === 'ACTIF' ? 'INACTIF' : 'ACTIF';
+    try {
+      const result = await adminService.updatePharmacieStatus(id, newStatus);
+      if (result.success) {
+        await loadPharmacies();
+        showToast(`Pharmacie mise à jour`, 'info');
+      }
+    } catch (error) {
+      console.error('Erreur mise à jour pharmacie:', error);
+      showToast('Erreur lors de la mise à jour', 'error');
+    }
+  };
+
+  // ==================== CRUD HÔPITAUX ====================
+  
+  const addHospital = async () => {
+    const nom = (document.getElementById('hospName') as HTMLInputElement)?.value;
+    const telephone = (document.getElementById('hospPhone') as HTMLInputElement)?.value;
+    const adresse = (document.getElementById('hospAddress') as HTMLInputElement)?.value;
+    const type = (document.getElementById('hospType') as HTMLSelectElement)?.value;
+    const capacite_lits = parseInt((document.getElementById('hospCapacity') as HTMLInputElement)?.value) || 100;
+    const urgences_24_7 = (document.getElementById('hospEmergency') as HTMLInputElement)?.checked;
+    const latitude = parseFloat((document.getElementById('hospLat') as HTMLInputElement)?.value) || -18.8792;
+    const longitude = parseFloat((document.getElementById('hospLng') as HTMLInputElement)?.value) || 47.5200;
+    
+    if (!nom || !telephone) {
+      showToast('Veuillez remplir les champs obligatoires', 'error');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      const result = await adminService.createCentreSante({
+        nom, telephone, adresse, type, capacite_lits, urgences_24_7, latitude, longitude
+      });
+      
+      if (result.success) {
+        showToast(`${nom} ajouté`, 'success');
+        setShowHospitalModal(false);
+        await loadHospitals();
+      }
+    } catch (error) {
+      console.error('Erreur ajout hôpital:', error);
+      showToast('Erreur lors de l\'ajout', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ==================== CRUD UTILISATEURS ====================
+  
+  const addUser = async () => {
+    const nom = (document.getElementById('userNom') as HTMLInputElement)?.value;
+    const prenom = (document.getElementById('userPrenom') as HTMLInputElement)?.value;
+    const email = (document.getElementById('userEmail') as HTMLInputElement)?.value;
+    const telephone = (document.getElementById('userPhone') as HTMLInputElement)?.value;
+    const role = (document.getElementById('userRole') as HTMLSelectElement)?.value;
+    const sexe = (document.getElementById('userGender') as HTMLSelectElement)?.value;
+    const groupe_sanguin = (document.getElementById('userBlood') as HTMLSelectElement)?.value;
+    const mot_de_passe = (document.getElementById('userPassword') as HTMLInputElement)?.value;
+    
+    if (!nom || !telephone) {
+      showToast('Veuillez remplir les champs obligatoires', 'error');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      const result = await adminService.createUser({
+        nom, prenom, email, telephone, mot_de_passe, role, sexe, groupe_sanguin
+      });
+      
+      if (result.success) {
+        showToast(`Utilisateur ${prenom} ${nom} ajouté`, 'success');
+        setShowUserModal(false);
+        await loadUsers();
+      }
+    } catch (error) {
+      console.error('Erreur ajout utilisateur:', error);
+      showToast('Erreur lors de l\'ajout', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleUserStatus = async (id: number, type: string, currentActive: boolean) => {
+    try {
+      const result = await adminService.updateUser(id, type, { statut: currentActive ? 'INACTIF' : 'ACTIF' });
+      if (result.success) {
+        await loadUsers();
+        showToast(`Utilisateur mis à jour`, 'info');
+      }
+    } catch (error) {
+      console.error('Erreur mise à jour utilisateur:', error);
+      showToast('Erreur lors de la mise à jour', 'error');
+    }
+  };
+
+  // ==================== URGENCES & COMMANDES ====================
+  
+  const updateEmergencyStatus = async (id: number, statut: string) => {
+    try {
+      const result = await adminService.updateEmergencyStatus(id, statut);
+      if (result.success) {
+        await loadEmergencies();
+        showToast(`Urgence #${id} mise à jour`, 'success');
+      }
+    } catch (error) {
+      console.error('Erreur mise à jour urgence:', error);
+      showToast('Erreur lors de la mise à jour', 'error');
+    }
+  };
+
+  const updateOrderStatus = async (id: number, statut: string) => {
+    try {
+      const result = await adminService.updateOrderStatus(id, statut);
+      if (result.success) {
+        await loadOrders();
+        showToast(`Commande #${id} ${statut}`, 'success');
+      }
+    } catch (error) {
+      console.error('Erreur mise à jour commande:', error);
+      showToast('Erreur lors de la mise à jour', 'error');
+    }
+  };
+
+  // ==================== UTILITAIRES ====================
+  
+  const exportReport = (type: string) => {
+    showToast(`Export ${type} en cours...`, 'success');
+    setTimeout(() => showToast(`Rapport ${type} téléchargé`, 'info'), 1000);
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   const handleNewEmergency = (data: any) => {
     showToast(`Nouvelle urgence: ${data.type_urgence}`, 'warn');
-    const newEmergency: Emergency = {
-      id: Date.now(),
-      patient: data.Patient?.nom || 'Inconnu',
-      type: data.type_urgence || 'Urgence',
-      severity: data.niveau_priorite || 'MOYEN',
-      status: 'PENDING',
-      time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-      location: data.localisation || 'Inconnu',
-      phone: data.Patient?.telephone || '',
-      assigned: null
-    };
-    setEmergencies(prev => [newEmergency, ...prev]);
+    loadEmergencies();
   };
 
   const handleNewBIP = (data: any) => {
     showToast(`📞 BIP reçu de: ${data.expediteur}`, 'warn');
   };
 
+  // ==================== MAP ET GRAPHIQUES ====================
+  
   const initAmbulanceMap = () => {
     const mapEl = document.getElementById('adminAmbulanceMap');
     if (!mapEl) return;
@@ -231,16 +575,16 @@ const AdminPage: React.FC = () => {
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(adminMapRef.current);
     
     ambulances.forEach(a => {
-      if (a.lat && a.lng) {
-        const color = a.status === 'DISPONIBLE' ? '#10b981' : '#52525b';
-        const icon = L.divIcon({
-          className: '',
-          html: `<div class="ambulance-marker" style="background:${color}"><i class="fas fa-ambulance text-white"></i></div>`,
-          iconSize: [40, 40],
-          iconAnchor: [20, 20]
-        });
-        L.marker([a.lat, a.lng], { icon }).addTo(adminMapRef.current!).bindPopup(`<b>${a.name}</b><br>${a.driver}<br>Statut: ${a.status === 'DISPONIBLE' ? 'Disponible' : 'En intervention'}`);
-      }
+      const lat = -18.8792 + (Math.random() - 0.5) * 0.05;
+      const lng = 47.5200 + (Math.random() - 0.5) * 0.05;
+      const color = a.statut === 'DISPONIBLE' ? '#10b981' : '#52525b';
+      const icon = L.divIcon({
+        className: '',
+        html: `<div class="ambulance-marker" style="background:${color}"><i class="fas fa-ambulance text-white"></i></div>`,
+        iconSize: [40, 40],
+        iconAnchor: [20, 20]
+      });
+      L.marker([lat, lng], { icon }).addTo(adminMapRef.current!).bindPopup(`<b>${a.nom}</b><br>Zone: ${a.zone_couverture || 'N/A'}<br>Statut: ${a.statut === 'DISPONIBLE' ? 'Disponible' : 'En intervention'}`);
     });
     
     setTimeout(() => {
@@ -251,6 +595,7 @@ const AdminPage: React.FC = () => {
   };
 
   const renderCharts = () => {
+    // Graphique des urgences
     const ctx1 = document.getElementById('chartEmergencies') as HTMLCanvasElement;
     if (ctx1) {
       if (chartRefs.current.emerg) chartRefs.current.emerg.destroy();
@@ -269,6 +614,7 @@ const AdminPage: React.FC = () => {
       });
     }
     
+    // Graphique des revenus
     const ctx2 = document.getElementById('chartRevenue') as HTMLCanvasElement;
     if (ctx2) {
       if (chartRefs.current.rev) chartRefs.current.rev.destroy();
@@ -287,6 +633,7 @@ const AdminPage: React.FC = () => {
       });
     }
     
+    // Graphique de sévérité
     const ctx3 = document.getElementById('chartSeverity') as HTMLCanvasElement;
     if (ctx3) {
       if (chartRefs.current.sev) chartRefs.current.sev.destroy();
@@ -305,14 +652,15 @@ const AdminPage: React.FC = () => {
       });
     }
     
+    // Graphique des genres
     const ctx4 = document.getElementById('chartGender') as HTMLCanvasElement;
     if (ctx4) {
       if (chartRefs.current.gender) chartRefs.current.gender.destroy();
       chartRefs.current.gender = new Chart(ctx4, {
         type: 'bar',
         data: {
-          labels: ['Femmes', 'Hommes', 'Autre'],
-          datasets: [{ label: 'Utilisateurs', data: [680, 520, 84], backgroundColor: ['#ec4899', '#06b6d4', '#a855f7'], borderRadius: 8 }]
+          labels: ['Femmes', 'Hommes'],
+          datasets: [{ label: 'Utilisateurs', data: [users.filter(u => u.sexe === 'FEMININ').length, users.filter(u => u.sexe === 'MASCULIN').length], backgroundColor: ['#ec4899', '#06b6d4'], borderRadius: 8 }]
         },
         options: {
           responsive: true,
@@ -324,6 +672,7 @@ const AdminPage: React.FC = () => {
       });
     }
     
+    // Graphique mensuel
     const ctx5 = document.getElementById('chartMonthly') as HTMLCanvasElement;
     if (ctx5) {
       if (chartRefs.current.monthly) chartRefs.current.monthly.destroy();
@@ -345,11 +694,19 @@ const AdminPage: React.FC = () => {
       });
     }
     
+    // Graphique stock par catégorie
     const ctx6 = document.getElementById('chartStockCategory') as HTMLCanvasElement;
     if (ctx6) {
       if (chartRefs.current.stockCat) chartRefs.current.stockCat.destroy();
-      const categories = medicines.map(m => m.cat).filter((v, i, a) => a.indexOf(v) === i);
-      const stockByCat = categories.map(cat => medicines.filter(m => m.cat === cat).reduce((sum, m) => sum + m.stock, 0));
+      const categoriesMap = new Map<string, number>();
+      medicines.forEach(m => {
+        const cat = m.categorie;
+        if (cat) {
+          categoriesMap.set(cat, (categoriesMap.get(cat) || 0) + m.stock);
+        }
+      });
+      const categories = Array.from(categoriesMap.keys());
+      const stockByCat = categories.map(cat => categoriesMap.get(cat) || 0);
       chartRefs.current.stockCat = new Chart(ctx6, {
         type: 'bar',
         data: { labels: categories, datasets: [{ label: 'Stock', data: stockByCat, backgroundColor: 'rgba(16,185,129,0.6)', borderRadius: 8 }] },
@@ -377,11 +734,11 @@ const AdminPage: React.FC = () => {
 
   const renderStock = () => {
     const filtered = medicines.filter(m => {
-      if (stockCategoryFilter !== 'ALL' && m.cat !== stockCategoryFilter) return false;
+      if (stockCategoryFilter !== 'ALL' && m.categorie !== stockCategoryFilter) return false;
       if (stockStatusFilter === 'LOW' && m.stock >= 20) return false;
       if (stockStatusFilter === 'MEDIUM' && (m.stock < 20 || m.stock > 50)) return false;
       if (stockStatusFilter === 'GOOD' && m.stock <= 50) return false;
-      if (stockSearch && !m.name.toLowerCase().includes(stockSearch.toLowerCase()) && !m.desc.toLowerCase().includes(stockSearch.toLowerCase())) return false;
+      if (stockSearch && !m.nom.toLowerCase().includes(stockSearch.toLowerCase()) && !(m.description || '').toLowerCase().includes(stockSearch.toLowerCase())) return false;
       return true;
     });
     
@@ -401,16 +758,16 @@ const AdminPage: React.FC = () => {
             <div class="flex items-center gap-3">
               <div class="w-12 h-12 rounded-full bg-info/15 flex items-center justify-center"><i class="fas fa-pills text-info text-xl"></i></div>
               <div>
-                <p class="font-semibold">${m.name}</p>
-                <p class="text-xs text-zinc-400">${m.desc}</p>
+                <p class="font-semibold">${m.nom}</p>
+                <p class="text-xs text-zinc-400">${m.description || ''}</p>
                 <div class="flex gap-2 mt-1">
-                  <span class="badge bg-zinc-700 text-zinc-300">${m.cat}</span>
-                  ${m.rx ? '<span class="badge bg-danger/20 text-danger">Ordonnance</span>' : '<span class="badge bg-success/20 text-success">Libre</span>'}
+                  <span class="badge bg-zinc-700 text-zinc-300">${m.categorie}</span>
+                  ${m.necessite_ordonnance ? '<span class="badge bg-danger/20 text-danger">Ordonnance</span>' : '<span class="badge bg-success/20 text-success">Libre</span>'}
                 </div>
               </div>
             </div>
             <div class="text-right">
-              <p class="text-info font-bold">${m.price.toLocaleString('fr-MG')} Ar</p>
+              <p class="text-info font-bold">${m.prix.toLocaleString('fr-MG')} Ar</p>
               <span class="badge ${stockStatus.color} mt-1">${stockStatus.text}</span>
             </div>
           </div>
@@ -439,180 +796,41 @@ const AdminPage: React.FC = () => {
     if (goodStockCount) goodStockCount.textContent = medicines.filter(m => m.stock > 50).length.toString();
   };
 
-  const updateStockQuantity = (id: number, delta: number) => {
-    setMedicines(prev => prev.map(m => {
-      if (m.id === id) {
-        const newStock = Math.max(0, m.stock + delta);
-        if (newStock < 20) showToast(`⚠️ Stock faible: ${m.name} (${newStock} restants)`, 'warn');
-        else showToast(`Stock mis à jour: ${m.name}`, 'success');
-        return { ...m, stock: newStock };
-      }
-      return m;
-    }));
-    renderStock();
-  };
-
-  const editStock = (id: number) => {
-    const med = medicines.find(m => m.id === id);
-    if (med) {
-      const newStock = prompt(`Nouveau stock pour ${med.name}:`, med.stock.toString());
-      if (newStock !== null && !isNaN(parseInt(newStock))) {
-        setMedicines(prev => prev.map(m => m.id === id ? { ...m, stock: parseInt(newStock) } : m));
-        renderStock();
-        showToast(`Stock de ${med.name} mis à jour`, 'success');
-      }
-    }
-  };
-
-  const addMedicine = () => {
-    const name = (document.getElementById('medName') as HTMLInputElement)?.value.trim();
-    const cat = (document.getElementById('medCategory') as HTMLSelectElement)?.value;
-    const desc = (document.getElementById('medDesc') as HTMLTextAreaElement)?.value.trim();
-    const price = parseInt((document.getElementById('medPrice') as HTMLInputElement)?.value);
-    const stock = parseInt((document.getElementById('medStock') as HTMLInputElement)?.value);
-    const rx = (document.getElementById('medRx') as HTMLInputElement)?.checked;
+  // ==================== USE EFFECTS ====================
+  
+  useEffect(() => {
+    loadAllData();
     
-    if (!name || !price || isNaN(stock)) {
-      showToast('Veuillez remplir tous les champs obligatoires', 'error');
-      return;
+    if (user) {
+      socketService.connect(localStorage.getItem('token') || '');
+      socketService.joinRoom('admin');
+      socketService.onNewEmergency(handleNewEmergency);
+      socketService.onNewBIP(handleNewBIP);
     }
     
-    const newId = Math.max(...medicines.map(m => m.id)) + 1;
-    setMedicines(prev => [...prev, { id: newId, name, desc: desc || 'Nouveau médicament', cat, price, stock, rx }]);
-    setShowMedicineModal(false);
-    showToast('Médicament ajouté avec succès', 'success');
-    renderStock();
-    renderCharts();
-  };
+    return () => {
+      socketService.off('new-emergency');
+      socketService.off('new-bip');
+    };
+  }, [user]);
 
-  const addAmbulance = () => {
-    const name = (document.getElementById('ambName') as HTMLInputElement)?.value;
-    const driver = (document.getElementById('ambDriver') as HTMLInputElement)?.value;
-    const phone = (document.getElementById('ambPhone') as HTMLInputElement)?.value;
-    const lat = parseFloat((document.getElementById('ambLat') as HTMLInputElement)?.value) || -18.8792;
-    const lng = parseFloat((document.getElementById('ambLng') as HTMLInputElement)?.value) || 47.5200;
-    
-    if (!name || !driver || !phone) {
-      showToast('Veuillez remplir les champs obligatoires', 'error');
-      return;
+  useEffect(() => {
+    if (currentPage === 'ambulances' && ambulances.length > 0) {
+      setTimeout(initAmbulanceMap, 100);
     }
-    
-    const newId = Math.max(...ambulances.map(a => a.id)) + 1;
-    setAmbulances(prev => [...prev, { id: newId, name, driver, phone, lat, lng, status: 'DISPONIBLE' }]);
-    setShowAmbulanceModal(false);
-    showToast(`Ambulance ${name} ajoutée`, 'success');
-    initAmbulanceMap();
-  };
-
-  const addHospital = () => {
-    const name = (document.getElementById('hospName') as HTMLInputElement)?.value;
-    const phone = (document.getElementById('hospPhone') as HTMLInputElement)?.value;
-    const lat = parseFloat((document.getElementById('hospLat') as HTMLInputElement)?.value) || -18.8792;
-    const lng = parseFloat((document.getElementById('hospLng') as HTMLInputElement)?.value) || 47.5200;
-    const capacity = parseInt((document.getElementById('hospCapacity') as HTMLInputElement)?.value) || 100;
-    const emergency = (document.getElementById('hospEmergency') as HTMLInputElement)?.checked;
-    
-    if (!name || !phone) {
-      showToast('Veuillez remplir les champs obligatoires', 'error');
-      return;
+    if (currentPage === 'dashboard') {
+      setTimeout(renderCharts, 100);
     }
-    
-    const newId = Math.max(...hospitals.map(h => h.id)) + 1;
-    setHospitals(prev => [...prev, { id: newId, name, phone, lat, lng, capacity, emergency }]);
-    setShowHospitalModal(false);
-    showToast(`${name} ajouté`, 'success');
-  };
-
-  const addPharmacy = () => {
-    const name = (document.getElementById('pharmName') as HTMLInputElement)?.value;
-    const phone = (document.getElementById('pharmPhone') as HTMLInputElement)?.value;
-    const lat = parseFloat((document.getElementById('pharmLat') as HTMLInputElement)?.value) || -18.8792;
-    const lng = parseFloat((document.getElementById('pharmLng') as HTMLInputElement)?.value) || 47.5200;
-    const delivery = (document.getElementById('pharmDelivery') as HTMLInputElement)?.checked;
-    
-    if (!name || !phone) {
-      showToast('Veuillez remplir les champs obligatoires', 'error');
-      return;
+    if (currentPage === 'stock') {
+      setTimeout(renderStock, 100);
     }
-    
-    const newId = Math.max(...pharmacies.map(p => p.id)) + 1;
-    setPharmacies(prev => [...prev, { id: newId, name, phone, lat, lng, online: true, delivery }]);
-    setShowPharmacyModal(false);
-    showToast(`${name} ajoutée`, 'success');
-  };
+  }, [currentPage, medicines, ambulances, users, stockCategoryFilter, stockStatusFilter, stockSearch]);
 
-  const addUser = () => {
-    const nom = (document.getElementById('userNom') as HTMLInputElement)?.value;
-    const prenom = (document.getElementById('userPrenom') as HTMLInputElement)?.value;
-    const email = (document.getElementById('userEmail') as HTMLInputElement)?.value;
-    const phone = (document.getElementById('userPhone') as HTMLInputElement)?.value;
-    const role = (document.getElementById('userRole') as HTMLSelectElement)?.value;
-    const gender = (document.getElementById('userGender') as HTMLSelectElement)?.value;
-    const blood = (document.getElementById('userBlood') as HTMLSelectElement)?.value;
-    
-    if (!nom || !prenom || !email) {
-      showToast('Veuillez remplir les champs obligatoires', 'error');
-      return;
-    }
-    
-    const newId = Math.max(...users.map(u => u.id)) + 1;
-    setUsers(prev => [...prev, { 
-      id: newId, email, name: `${prenom} ${nom}`, phone, role, gender, blood, 
-      active: true, created: new Date().toISOString().split('T')[0] 
-    }]);
-    setShowUserModal(false);
-    showToast(`Utilisateur ${prenom} ${nom} ajouté`, 'success');
-  };
-
-  const toggleAmbulance = (id: number) => {
-    setAmbulances(prev => prev.map(a => a.id === id ? { ...a, status: a.status === 'DISPONIBLE' ? 'EN_INTERVENTION' : 'DISPONIBLE' } : a));
-    initAmbulanceMap();
-    showToast(`Ambulance mise à jour`, 'info');
-  };
-
-  const togglePharmacy = (id: number) => {
-    setPharmacies(prev => prev.map(p => p.id === id ? { ...p, online: !p.online } : p));
-    showToast(`Pharmacie mise à jour`, 'info');
-  };
-
-  const updateEmergency = (id: number, status: string) => {
-    setEmergencies(prev => prev.map(e => {
-      if (e.id === id) {
-        const updated = { ...e, status };
-        if (status === 'ASSIGNED' && !e.assigned) {
-          const availableAmbulance = ambulances.find(a => a.status === 'DISPONIBLE');
-          if (availableAmbulance) updated.assigned = availableAmbulance.name;
-        }
-        return updated;
-      }
-      return e;
-    }));
-    showToast(`Urgence #${id} mise à jour`, 'success');
-  };
-
-  const updateOrder = (id: number, status: string) => {
-    setOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
-    showToast(`Commande #${id} ${status}`, 'success');
-  };
-
-  const toggleUser = (id: number) => {
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, active: !u.active } : u));
-    showToast(`Utilisateur mis à jour`, 'info');
-  };
-
-  const exportReport = (type: string) => {
-    showToast(`Export ${type} en cours...`, 'success');
-    setTimeout(() => showToast(`Rapport ${type} téléchargé`, 'info'), 1000);
-  };
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
+  // ==================== EXPOSER FONCTIONS AU GLOBAL ====================
+  
   React.useEffect(() => {
-    (window as any).editStock = editStock;
-    (window as any).updateStockQuantity = updateStockQuantity;
+    (window as any).editStock = editMedicineStock;
+    (window as any).updateStockQuantity = updateMedicineStock;
     (window as any).filterStock = renderStock;
     (window as any).showPage = (page: string) => {
       setCurrentPage(page);
@@ -620,15 +838,21 @@ const AdminPage: React.FC = () => {
     };
     (window as any).toggleMobileMenu = () => setMobileMenuOpen(!mobileMenuOpen);
     (window as any).showAddMedicine = () => setShowMedicineModal(true);
-    (window as any).closeModal = (id: string) => {
-      if (id === 'medicineModal') setShowMedicineModal(false);
-    };
     (window as any).addMedicine = addMedicine;
-    (window as any).toggleAmbulance = toggleAmbulance;
-    (window as any).togglePharmacy = togglePharmacy;
-    (window as any).updateEmergency = updateEmergency;
-    (window as any).updateOrder = updateOrder;
-    (window as any).toggleUser = toggleUser;
+    (window as any).toggleAmbulance = (id: number) => {
+      const amb = ambulances.find(a => a.id === id);
+      if (amb) toggleAmbulanceStatus(id, amb.statut);
+    };
+    (window as any).togglePharmacy = (id: number) => {
+      const pharm = pharmacies.find(p => p.id === id);
+      if (pharm) togglePharmacyStatus(id, pharm.statut);
+    };
+    (window as any).updateEmergency = updateEmergencyStatus;
+    (window as any).updateOrder = updateOrderStatus;
+    (window as any).toggleUser = (id: number) => {
+      const userItem = users.find(u => u.id === id);
+      if (userItem) toggleUserStatus(id, userItem.role, userItem.statut === 'ACTIF');
+    };
     (window as any).exportReport = exportReport;
     (window as any).filterEmergencies = (filter: string) => setEmergencyFilter(filter);
     (window as any).showStockAlert = () => {
@@ -636,10 +860,12 @@ const AdminPage: React.FC = () => {
       if (lowStock.length === 0) showToast('Aucun stock faible détecté', 'success');
       else showToast(`${lowStock.length} médicament(s) en stock faible`, 'warn');
     };
-  }, [medicines, ambulances, pharmacies, emergencies, mobileMenuOpen]);
+  }, [medicines, ambulances, pharmacies, users]);
 
-  const filteredEmergencies = emergencyFilter === 'ALL' ? emergencies : emergencies.filter(e => e.status === emergencyFilter);
+  const filteredEmergencies = emergencyFilter === 'ALL' ? emergencies : emergencies.filter(e => e.statut === emergencyFilter);
 
+  // ==================== RENDU JSX ====================
+  
   return (
     <div id="adminApp">
       {loading && <Loading />}
@@ -684,7 +910,7 @@ const AdminPage: React.FC = () => {
             ))}
           </nav>
           <div className="p-4 border-t border-zinc-800">
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-zinc-800/50">
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-zinc-800/50">
               <div className="w-10 h-10 rounded-full bg-danger/20 flex items-center justify-center"><i className="fas fa-user-shield text-danger"></i></div>
               <div className="flex-1"><p className="text-sm font-semibold">{user?.nom || 'Admin'}</p><p className="text-[10px] text-zinc-500">{user?.niveau_acces || 'Super Admin'}</p></div>
               <div className="flex items-center gap-2">
@@ -698,7 +924,7 @@ const AdminPage: React.FC = () => {
         </div>
 
         {/* Header Mobile */}
-          <div className="lg:hidden fixed top-0 left-0 right-0 z-30 glass px-4 py-3 flex items-center justify-between">
+        <div className="lg:hidden fixed top-0 left-0 right-0 z-30 glass px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button onClick={() => setMobileMenuOpen(true)} className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center"><i className="fas fa-bars text-zinc-400"></i></button>
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-danger to-orange-500 flex items-center justify-center"><i className="fas fa-heartbeat text-white"></i></div>
@@ -740,7 +966,8 @@ const AdminPage: React.FC = () => {
 
         {/* Main Content */}
         <div className="flex-1 lg:ml-72 pt-16 lg:pt-0 p-4 md:p-6">
-          {/* Dashboard Page */}
+          
+          {/* ==================== DASHBOARD ==================== */}
           {currentPage === 'dashboard' && (
             <div>
               <div className="mb-6 md:mb-8">
@@ -754,31 +981,31 @@ const AdminPage: React.FC = () => {
                     <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-danger/15 flex items-center justify-center"><i className="fas fa-exclamation-triangle text-danger text-lg md:text-xl"></i></div>
                     <span className="badge bg-danger/20 text-danger">+12%</span>
                   </div>
-                  <p className="text-2xl md:text-3xl font-bold">{emergencies.length}</p>
-                  <p className="text-xs text-zinc-400 mt-1">Urgences ce mois</p>
+                  <p className="text-2xl md:text-3xl font-bold">{stats.urgences || 0}</p>
+                  <p className="text-xs text-zinc-400 mt-1">Urgences totales</p>
                 </div>
                 <div className="stat-card card p-4 md:p-5">
                   <div className="flex items-center justify-between mb-3">
                     <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-info/15 flex items-center justify-center"><i className="fas fa-shopping-bag text-info text-lg md:text-xl"></i></div>
                     <span className="badge bg-info/20 text-info">+18%</span>
                   </div>
-                  <p className="text-2xl md:text-3xl font-bold">{orders.length}</p>
-                  <p className="text-xs text-zinc-400 mt-1">Commandes ce mois</p>
+                  <p className="text-2xl md:text-3xl font-bold">{stats.commandes || 0}</p>
+                  <p className="text-xs text-zinc-400 mt-1">Commandes totales</p>
                 </div>
                 <div className="stat-card card p-4 md:p-5">
                   <div className="flex items-center justify-between mb-3">
                     <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-success/15 flex items-center justify-center"><i className="fas fa-users text-success text-lg md:text-xl"></i></div>
                     <span className="badge bg-success/20 text-success">+23%</span>
                   </div>
-                  <p className="text-2xl md:text-3xl font-bold">{users.filter(u => u.active).length}</p>
-                  <p className="text-xs text-zinc-400 mt-1">Utilisateurs actifs</p>
+                  <p className="text-2xl md:text-3xl font-bold">{stats.patients || 0}</p>
+                  <p className="text-xs text-zinc-400 mt-1">Patients inscrits</p>
                 </div>
                 <div className="stat-card card p-4 md:p-5">
                   <div className="flex items-center justify-between mb-3">
                     <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-warn/15 flex items-center justify-center"><i className="fas fa-boxes text-warn text-lg md:text-xl"></i></div>
                     <span className="badge bg-warn/20 text-warn">-5%</span>
                   </div>
-                  <p className="text-2xl md:text-3xl font-bold">{medicines.length}</p>
+                  <p className="text-2xl md:text-3xl font-bold">{stats.medicaments || 0}</p>
                   <p className="text-xs text-zinc-400 mt-1">Produits en stock</p>
                 </div>
               </div>
@@ -802,7 +1029,7 @@ const AdminPage: React.FC = () => {
             </div>
           )}
 
-          {/* Ambulances Page */}
+          {/* ==================== AMBULANCES ==================== */}
           {currentPage === 'ambulances' && (
             <div>
               <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
@@ -815,17 +1042,17 @@ const AdminPage: React.FC = () => {
                   <div key={a.id} className="card p-5">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-3">
-                        <div className={`w-12 h-12 rounded-full ${a.status === 'DISPONIBLE' ? 'bg-success/15' : 'bg-zinc-800'} flex items-center justify-center`}>
-                          <i className={`fas fa-ambulance ${a.status === 'DISPONIBLE' ? 'text-success' : 'text-zinc-600'} text-xl`}></i>
+                        <div className={`w-12 h-12 rounded-full ${a.statut === 'DISPONIBLE' ? 'bg-success/15' : 'bg-zinc-800'} flex items-center justify-center`}>
+                          <i className={`fas fa-ambulance ${a.statut === 'DISPONIBLE' ? 'text-success' : 'text-zinc-600'} text-xl`}></i>
                         </div>
-                        <div><p className="font-semibold">{a.name}</p><p className="text-xs text-zinc-400">{a.driver}</p></div>
+                        <div><p className="font-semibold">{a.nom}</p><p className="text-xs text-zinc-400">{a.matricule || 'N/A'}</p></div>
                       </div>
-                      <span className={`badge ${a.status === 'DISPONIBLE' ? 'bg-success/20 text-success' : 'bg-zinc-700 text-zinc-400'}`}>{a.status === 'DISPONIBLE' ? 'Disponible' : 'En intervention'}</span>
+                      <span className={`badge ${a.statut === 'DISPONIBLE' ? 'bg-success/20 text-success' : 'bg-zinc-700 text-zinc-400'}`}>{a.statut === 'DISPONIBLE' ? 'Disponible' : 'En intervention'}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-zinc-400 mb-4"><i className="fas fa-phone text-xs"></i>{a.phone}</div>
+                    <div className="flex items-center gap-2 text-sm text-zinc-400 mb-4"><i className="fas fa-phone text-xs"></i>{a.telephone}</div>
                     <div className="flex gap-2">
-                      <button onClick={() => toggleAmbulance(a.id)} className={`flex-1 py-2 rounded-xl ${a.status === 'DISPONIBLE' ? 'bg-warn/15 text-warn' : 'bg-success/15 text-success'} text-xs font-semibold`}>
-                        {a.status === 'DISPONIBLE' ? 'Mettre en intervention' : 'Rendre disponible'}
+                      <button onClick={() => toggleAmbulanceStatus(a.id, a.statut)} className={`flex-1 py-2 rounded-xl ${a.statut === 'DISPONIBLE' ? 'bg-warn/15 text-warn' : 'bg-success/15 text-success'} text-xs font-semibold`}>
+                        {a.statut === 'DISPONIBLE' ? 'Mettre en intervention' : 'Rendre disponible'}
                       </button>
                     </div>
                   </div>
@@ -834,7 +1061,7 @@ const AdminPage: React.FC = () => {
             </div>
           )}
 
-          {/* Hospitals Page */}
+          {/* ==================== HÔPITAUX ==================== */}
           {currentPage === 'hospitals' && (
             <div>
               <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
@@ -846,11 +1073,11 @@ const AdminPage: React.FC = () => {
                   <div key={h.id} className="card p-5">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 rounded-full bg-info/15 flex items-center justify-center"><i className="fas fa-hospital text-info text-xl"></i></div>
-                      <div><p className="font-semibold">{h.name}</p><p className="text-xs text-zinc-400">{h.phone}</p></div>
+                      <div><p className="font-semibold">{h.nom}</p><p className="text-xs text-zinc-400">{h.telephone}</p></div>
                     </div>
                     <div className="mt-3 flex justify-between">
-                      <span className="text-sm text-zinc-400">Capacité: {h.capacity} lits</span>
-                      <span className={`badge ${h.emergency ? 'bg-danger/20 text-danger' : 'bg-zinc-700'}`}>{h.emergency ? 'Urgences 24/7' : 'Standard'}</span>
+                      <span className="text-sm text-zinc-400">Capacité: {h.capacite_lits || 'N/A'} lits</span>
+                      <span className={`badge ${h.urgences_24_7 ? 'bg-danger/20 text-danger' : 'bg-zinc-700'}`}>{h.urgences_24_7 ? 'Urgences 24/7' : 'Standard'}</span>
                     </div>
                   </div>
                 ))}
@@ -858,7 +1085,7 @@ const AdminPage: React.FC = () => {
             </div>
           )}
 
-          {/* Pharmacies Page */}
+          {/* ==================== PHARMACIES ==================== */}
           {currentPage === 'pharmacies' && (
             <div>
               <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
@@ -870,12 +1097,12 @@ const AdminPage: React.FC = () => {
                   <div key={p.id} className="card p-5">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 rounded-full bg-warn/15 flex items-center justify-center"><i className="fas fa-pills text-warn text-xl"></i></div>
-                      <div><p className="font-semibold">{p.name}</p><p className="text-xs text-zinc-400">{p.phone}</p></div>
+                      <div><p className="font-semibold">{p.nom_pharmacie}</p><p className="text-xs text-zinc-400">{p.telephone}</p></div>
                     </div>
                     <div className="mt-3 flex gap-2">
-                      <span className={`badge ${p.online ? 'bg-success/20 text-success' : 'bg-zinc-700'}`}>{p.online ? '🟢 En ligne' : '🔴 Hors ligne'}</span>
-                      <button onClick={() => togglePharmacy(p.id)} className={`text-xs ${p.online ? 'text-warn' : 'text-success'}`}>
-                        <i className="fas fa-power-off mr-1"></i>{p.online ? 'Désactiver' : 'Activer'}
+                      <span className={`badge ${p.statut === 'ACTIF' ? 'bg-success/20 text-success' : 'bg-zinc-700'}`}>{p.statut === 'ACTIF' ? '🟢 En ligne' : '🔴 Hors ligne'}</span>
+                      <button onClick={() => togglePharmacyStatus(p.id, p.statut)} className={`text-xs ${p.statut === 'ACTIF' ? 'text-warn' : 'text-success'}`}>
+                        <i className="fas fa-power-off mr-1"></i>{p.statut === 'ACTIF' ? 'Désactiver' : 'Activer'}
                       </button>
                     </div>
                   </div>
@@ -884,7 +1111,7 @@ const AdminPage: React.FC = () => {
             </div>
           )}
 
-          {/* Stock Page */}
+          {/* ==================== STOCK MÉDICAMENTS ==================== */}
           {currentPage === 'stock' && (
             <div>
               <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
@@ -932,14 +1159,14 @@ const AdminPage: React.FC = () => {
             </div>
           )}
 
-          {/* Emergencies Page */}
+          {/* ==================== URGENCES ==================== */}
           {currentPage === 'emergencies' && (
             <div>
               <div className="mb-6"><h1 className="text-2xl font-bold">Gestion des urgences</h1><p className="text-zinc-400 text-sm">Alertes en temps réel</p></div>
               <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-                {['ALL', 'PENDING', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED'].map(filter => (
+                {['ALL', 'PENDING', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CANCELLED'].map(filter => (
                   <button key={filter} className={`tab-btn ${emergencyFilter === filter ? 'active' : ''}`} onClick={() => setEmergencyFilter(filter)}>
-                    {filter === 'ALL' ? 'Toutes' : filter === 'PENDING' ? 'En attente' : filter === 'ASSIGNED' ? 'Assignées' : filter === 'IN_PROGRESS' ? 'En cours' : 'Résolues'}
+                    {filter === 'ALL' ? 'Toutes' : filter === 'PENDING' ? 'En attente' : filter === 'ASSIGNED' ? 'Assignées' : filter === 'IN_PROGRESS' ? 'En cours' : filter === 'RESOLVED' ? 'Résolues' : 'Annulées'}
                   </button>
                 ))}
               </div>
@@ -949,22 +1176,23 @@ const AdminPage: React.FC = () => {
                     PENDING: 'bg-warn/20 text-warn',
                     ASSIGNED: 'bg-info/20 text-info',
                     IN_PROGRESS: 'bg-purple-500/20 text-purple-400',
-                    RESOLVED: 'bg-success/20 text-success'
+                    RESOLVED: 'bg-success/20 text-success',
+                    CANCELLED: 'bg-danger/20 text-danger'
                   };
                   return (
                     <div key={e.id} className="card p-5">
                       <div className="flex items-center justify-between">
-                        <div><p className="font-semibold">{e.patient}</p><p className="text-xs text-zinc-400">{e.type} — {e.location} — {e.time}</p></div>
-                        <span className={`badge ${statusColors[e.status] || 'bg-zinc-700'}`}>{e.status}</span>
+                        <div><p className="font-semibold">{e.Patient?.nom || 'Inconnu'} {e.Patient?.prenom || ''}</p><p className="text-xs text-zinc-400">{e.type_urgence} — {e.localisation} — {new Date(e.date_alerte).toLocaleTimeString()}</p></div>
+                        <span className={`badge ${statusColors[e.statut] || 'bg-zinc-700'}`}>{e.statut}</span>
                       </div>
                       <div className="mt-3 flex gap-2">
-                        <a href={`tel:${e.phone}`} className="text-xs text-info"><i className="fas fa-phone mr-1"></i>{e.phone}</a>
-                        {e.assigned && <span className="text-xs text-zinc-500"><i className="fas fa-ambulance mr-1"></i>{e.assigned}</span>}
+                        <a href={`tel:${e.Patient?.telephone}`} className="text-xs text-info"><i className="fas fa-phone mr-1"></i>{e.Patient?.telephone}</a>
+                        {e.Ambulancier && <span className="text-xs text-zinc-500"><i className="fas fa-ambulance mr-1"></i>{e.Ambulancier.nom}</span>}
                       </div>
                       <div className="flex gap-2 mt-4">
-                        <button onClick={() => updateEmergency(e.id, 'ASSIGNED')} className="flex-1 py-2 rounded-xl bg-info/15 text-info text-xs">Assigner</button>
-                        <button onClick={() => updateEmergency(e.id, 'IN_PROGRESS')} className="flex-1 py-2 rounded-xl bg-purple-500/15 text-purple-400 text-xs">En cours</button>
-                        <button onClick={() => updateEmergency(e.id, 'RESOLVED')} className="flex-1 py-2 rounded-xl bg-success/15 text-success text-xs">Résoudre</button>
+                        <button onClick={() => updateEmergencyStatus(e.id, 'ASSIGNED')} className="flex-1 py-2 rounded-xl bg-info/15 text-info text-xs">Assigner</button>
+                        <button onClick={() => updateEmergencyStatus(e.id, 'IN_PROGRESS')} className="flex-1 py-2 rounded-xl bg-purple-500/15 text-purple-400 text-xs">En cours</button>
+                        <button onClick={() => updateEmergencyStatus(e.id, 'RESOLVED')} className="flex-1 py-2 rounded-xl bg-success/15 text-success text-xs">Résoudre</button>
                       </div>
                     </div>
                   );
@@ -973,7 +1201,7 @@ const AdminPage: React.FC = () => {
             </div>
           )}
 
-          {/* Orders Page */}
+          {/* ==================== COMMANDES ==================== */}
           {currentPage === 'orders' && (
             <div>
               <div className="mb-6"><h1 className="text-2xl font-bold">Gestion des commandes</h1><p className="text-zinc-400 text-sm">Commandes de médicaments</p></div>
@@ -983,24 +1211,25 @@ const AdminPage: React.FC = () => {
                     DELIVERED: 'bg-success/20 text-success',
                     PREPARED: 'bg-warn/20 text-warn',
                     CONFIRMED: 'bg-info/20 text-info',
-                    CART: 'bg-zinc-700 text-zinc-300',
-                    CANCELLED: 'bg-danger/20 text-danger'
+                    PANIER: 'bg-zinc-700 text-zinc-300',
+                    CANCELLED: 'bg-danger/20 text-danger',
+                    EN_LIVRAISON: 'bg-purple-500/20 text-purple-400'
                   };
                   const statusLabels: { [key: string]: string } = {
-                    CART: 'Panier', CONFIRMED: 'Confirmée', PREPARED: 'Préparée', DELIVERED: 'Livrée', CANCELLED: 'Annulée'
+                    PANIER: 'Panier', CONFIRMED: 'Confirmée', PREPARED: 'Préparée', EN_LIVRAISON: 'En livraison', DELIVERED: 'Livrée', CANCELLED: 'Annulée'
                   };
                   return (
                     <div key={o.id} className="card p-5">
                       <div className="flex justify-between">
-                        <div><p className="font-semibold">Commande #{o.id}</p><p className="text-xs text-zinc-400">{o.date} — {o.pharmacy}</p><p className="text-sm mt-1">{o.user}</p></div>
-                        <span className={`badge ${statusColors[o.status]}`}>{statusLabels[o.status] || o.status}</span>
+                        <div><p className="font-semibold">Commande #{o.id}</p><p className="text-xs text-zinc-400">{new Date(o.date_commande).toLocaleDateString()} — {o.Pharmacien?.nom_pharmacie || 'N/A'}</p><p className="text-sm mt-1">{o.Patient?.nom} {o.Patient?.prenom}</p></div>
+                        <span className={`badge ${statusColors[o.statut]}`}>{statusLabels[o.statut] || o.statut}</span>
                       </div>
-                      <div className="mt-2 text-sm">{o.items.map(i => `${i.name} x${i.qty}`).join(', ')}</div>
+                      <div className="mt-2 text-sm">{o.CommandeDetails?.map(d => `${d.Medicament?.nom} x${d.quantite}`).join(', ') || 'Aucun détail'}</div>
                       <div className="mt-3 flex justify-between">
-                        <span className="text-info font-bold">{o.total.toLocaleString('fr-MG')} Ar</span>
+                        <span className="text-info font-bold">{o.montant_total.toLocaleString('fr-MG')} Ar</span>
                         <div className="flex gap-2">
-                          <button onClick={() => updateOrder(o.id, 'PREPARED')} className="px-3 py-1 rounded-lg bg-warn/15 text-warn text-xs">Préparer</button>
-                          <button onClick={() => updateOrder(o.id, 'DELIVERED')} className="px-3 py-1 rounded-lg bg-success/15 text-success text-xs">Livrer</button>
+                          {o.statut === 'CONFIRMED' && <button onClick={() => updateOrderStatus(o.id, 'PREPARED')} className="px-3 py-1 rounded-lg bg-warn/15 text-warn text-xs">Préparer</button>}
+                          {o.statut === 'PREPARED' && <button onClick={() => updateOrderStatus(o.id, 'DELIVERED')} className="px-3 py-1 rounded-lg bg-success/15 text-success text-xs">Livrer</button>}
                         </div>
                       </div>
                     </div>
@@ -1010,7 +1239,7 @@ const AdminPage: React.FC = () => {
             </div>
           )}
 
-          {/* Users Page */}
+          {/* ==================== UTILISATEURS ==================== */}
           {currentPage === 'users' && (
             <div>
               <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
@@ -1021,11 +1250,13 @@ const AdminPage: React.FC = () => {
                 {users.map(u => (
                   <div key={u.id} className="card p-5 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-danger to-orange-500 flex items-center justify-center text-lg font-bold">{u.name[0]}</div>
-                      <div><p className="font-semibold">{u.name}</p><p className="text-xs text-zinc-400">{u.email}</p></div>
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-danger to-orange-500 flex items-center justify-center text-lg font-bold">{u.nom?.[0] || u.telephone?.[0] || 'U'}</div>
+                      <div><p className="font-semibold">{u.nom} {u.prenom || ''}</p><p className="text-xs text-zinc-400">{u.email || u.telephone}</p><p className="text-xs text-zinc-500">{u.role}</p></div>
                     </div>
                     <div className="flex gap-2">
-                      <button onClick={() => toggleUser(u.id)} className={`px-3 py-1.5 rounded-lg ${u.active ? 'bg-warn/15 text-warn' : 'bg-success/15 text-success'} text-xs`}>{u.active ? 'Désactiver' : 'Activer'}</button>
+                      <button onClick={() => toggleUserStatus(u.id, u.role, u.statut === 'ACTIF')} className={`px-3 py-1.5 rounded-lg ${u.statut === 'ACTIF' ? 'bg-warn/15 text-warn' : 'bg-success/15 text-success'} text-xs`}>
+                        {u.statut === 'ACTIF' ? 'Désactiver' : 'Activer'}
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -1033,7 +1264,7 @@ const AdminPage: React.FC = () => {
             </div>
           )}
 
-          {/* Reports Page */}
+          {/* ==================== RAPPORTS ==================== */}
           {currentPage === 'reports' && (
             <div>
               <div className="mb-6"><h1 className="text-2xl font-bold">Rapports et analyses</h1><p className="text-zinc-400 text-sm">Export de données</p></div>
@@ -1101,8 +1332,7 @@ const AdminPage: React.FC = () => {
               <button onClick={() => setShowAmbulanceModal(false)} className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center"><i className="fas fa-times text-zinc-400"></i></button>
             </div>
             <div className="space-y-4">
-              <input type="text" id="ambName" placeholder="Nom de l'ambulance (ex: AMB-006)" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
-              <input type="text" id="ambDriver" placeholder="Nom du chauffeur" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+              <input type="text" id="ambName" placeholder="Nom de l'ambulance" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
               <input type="tel" id="ambPhone" placeholder="Téléphone" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
               <input type="text" id="ambMatricule" placeholder="Matricule" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
               <select id="ambZone" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white">
@@ -1111,10 +1341,6 @@ const AdminPage: React.FC = () => {
                 <option value="Tana Est">Zone Tana Est</option>
                 <option value="Tana Ouest">Zone Tana Ouest</option>
               </select>
-              <div className="grid grid-cols-2 gap-3">
-                <input type="number" id="ambLat" placeholder="Latitude" step="0.000001" defaultValue="-18.8792" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
-                <input type="number" id="ambLng" placeholder="Longitude" step="0.000001" defaultValue="47.5200" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
-              </div>
               <input type="password" id="ambPassword" placeholder="Mot de passe" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
               <button onClick={addAmbulance} className="w-full bg-success text-white py-3 rounded-xl font-semibold">Ajouter l'ambulance</button>
             </div>
@@ -1170,10 +1396,6 @@ const AdminPage: React.FC = () => {
               <input type="tel" id="pharmPhone" placeholder="Téléphone" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
               <input type="email" id="pharmEmail" placeholder="Email" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
               <input type="text" id="pharmAddress" placeholder="Adresse" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
-              <div className="grid grid-cols-2 gap-3">
-                <input type="number" id="pharmLat" placeholder="Latitude" step="0.000001" defaultValue="-18.8792" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
-                <input type="number" id="pharmLng" placeholder="Longitude" step="0.000001" defaultValue="47.5200" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
-              </div>
               <input type="password" id="pharmPassword" placeholder="Mot de passe" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
               <div className="flex gap-2">
                 <label className="flex items-center gap-2"><input type="checkbox" id="pharmDelivery" defaultChecked /> <span className="text-sm">Livraison disponible</span></label>

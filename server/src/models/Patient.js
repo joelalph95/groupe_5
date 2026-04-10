@@ -65,7 +65,12 @@ const Patient = sequelize.define('Patient', {
   date_inscription: {
     type: DataTypes.DATE,
     defaultValue: DataTypes.NOW
-  }
+  },
+  statut: {
+  type: DataTypes.ENUM('ACTIF', 'INACTIF'),
+  defaultValue: 'ACTIF'
+}
+
 }, {
   tableName: 'patients',
   timestamps: false,

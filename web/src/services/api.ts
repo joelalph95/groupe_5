@@ -178,23 +178,20 @@ export const wellnessService = {
 };
 
 export const adminService = {
+  // Dashboard
   getStats: async (): Promise<any> => {
     const response = await api.get('/admin/stats');
     return response.data;
   },
   
-  getUsers: async (): Promise<any> => {
-    const response = await api.get('/admin/users');
+  // Médicaments
+  getMedicaments: async (): Promise<Medicament[]> => {
+    const response = await api.get('/admin/medicaments');
     return response.data;
   },
   
-  getEmergencies: async (): Promise<Urgence[]> => {
-    const response = await api.get('/admin/emergencies');
-    return response.data;
-  },
-  
-  getOrders: async (): Promise<Commande[]> => {
-    const response = await api.get('/admin/orders');
+  getMedicament: async (id: number): Promise<Medicament> => {
+    const response = await api.get(`/admin/medicaments/${id}`);
     return response.data;
   },
   
@@ -208,8 +205,55 @@ export const adminService = {
     return response.data;
   },
   
+  deleteMedicament: async (id: number): Promise<{ success: boolean }> => {
+    const response = await api.delete(`/admin/medicaments/${id}`);
+    return response.data;
+  },
+  
+  updateMedicamentStock: async (id: number, stock: number): Promise<{ success: boolean; medicament: Medicament }> => {
+    const response = await api.patch(`/admin/medicaments/${id}/stock`, { stock });
+    return response.data;
+  },
+  
+  // Ambulances
+  getAmbulances: async (): Promise<any[]> => {
+    const response = await api.get('/admin/ambulances');
+    return response.data;
+  },
+  
+  getAmbulance: async (id: number): Promise<any> => {
+    const response = await api.get(`/admin/ambulances/${id}`);
+    return response.data;
+  },
+  
+  createAmbulance: async (data: any): Promise<{ success: boolean; ambulance: any }> => {
+    const response = await api.post('/admin/ambulances', data);
+    return response.data;
+  },
+  
+  updateAmbulance: async (id: number, data: any): Promise<{ success: boolean; ambulance: any }> => {
+    const response = await api.put(`/admin/ambulances/${id}`, data);
+    return response.data;
+  },
+  
+  deleteAmbulance: async (id: number): Promise<{ success: boolean }> => {
+    const response = await api.delete(`/admin/ambulances/${id}`);
+    return response.data;
+  },
+  
+  updateAmbulanceStatus: async (id: number, statut: string): Promise<{ success: boolean; ambulance: any }> => {
+    const response = await api.patch(`/admin/ambulances/${id}/status`, { statut });
+    return response.data;
+  },
+  
+  // Centres de santé
   getCentresSante: async (): Promise<CentreSante[]> => {
     const response = await api.get('/admin/centres-sante');
+    return response.data;
+  },
+  
+  getCentreSante: async (id: number): Promise<CentreSante> => {
+    const response = await api.get(`/admin/centres-sante/${id}`);
     return response.data;
   },
   
@@ -218,18 +262,102 @@ export const adminService = {
     return response.data;
   },
   
-  createArticle: async (data: any): Promise<{ success: boolean; article: Article }> => {
-    const response = await api.post('/articles', data);
+  updateCentreSante: async (id: number, data: any): Promise<{ success: boolean; centre: CentreSante }> => {
+    const response = await api.put(`/admin/centres-sante/${id}`, data);
     return response.data;
   },
   
-  updateArticle: async (id: number, data: any): Promise<{ success: boolean; article: Article }> => {
-    const response = await api.put(`/articles/${id}`, data);
+  deleteCentreSante: async (id: number): Promise<{ success: boolean }> => {
+    const response = await api.delete(`/admin/centres-sante/${id}`);
     return response.data;
   },
   
-  deleteArticle: async (id: number): Promise<{ success: boolean }> => {
-    const response = await api.delete(`/articles/${id}`);
+  // Pharmacies
+  getPharmacies: async (): Promise<any[]> => {
+    const response = await api.get('/admin/pharmacies');
+    return response.data;
+  },
+  
+  getPharmacie: async (id: number): Promise<any> => {
+    const response = await api.get(`/admin/pharmacies/${id}`);
+    return response.data;
+  },
+  
+  createPharmacie: async (data: any): Promise<{ success: boolean; pharmacie: any }> => {
+    const response = await api.post('/admin/pharmacies', data);
+    return response.data;
+  },
+  
+  updatePharmacie: async (id: number, data: any): Promise<{ success: boolean; pharmacie: any }> => {
+    const response = await api.put(`/admin/pharmacies/${id}`, data);
+    return response.data;
+  },
+  
+  deletePharmacie: async (id: number): Promise<{ success: boolean }> => {
+    const response = await api.delete(`/admin/pharmacies/${id}`);
+    return response.data;
+  },
+  
+  updatePharmacieStatus: async (id: number, statut: string): Promise<{ success: boolean; pharmacie: any }> => {
+    const response = await api.patch(`/admin/pharmacies/${id}/status`, { statut });
+    return response.data;
+  },
+  
+  // Utilisateurs
+  getUsers: async (): Promise<any> => {
+    const response = await api.get('/admin/users');
+    return response.data;
+  },
+  
+  getUser: async (id: number, type: string): Promise<any> => {
+    const response = await api.get(`/admin/users/${id}/${type}`);
+    return response.data;
+  },
+  
+  createUser: async (data: any): Promise<{ success: boolean; user: any }> => {
+    const response = await api.post('/admin/users', data);
+    return response.data;
+  },
+  
+  updateUser: async (id: number, type: string, data: any): Promise<{ success: boolean; user: any }> => {
+    const response = await api.put(`/admin/users/${id}/${type}`, data);
+    return response.data;
+  },
+  
+  deleteUser: async (id: number, type: string): Promise<{ success: boolean }> => {
+    const response = await api.delete(`/admin/users/${id}/${type}`);
+    return response.data;
+  },
+  
+  // Commandes
+  getOrders: async (): Promise<Commande[]> => {
+    const response = await api.get('/admin/orders');
+    return response.data;
+  },
+  
+  getOrder: async (id: number): Promise<Commande> => {
+    const response = await api.get(`/admin/orders/${id}`);
+    return response.data;
+  },
+  
+  updateOrderStatus: async (id: number, statut: string): Promise<{ success: boolean; commande: Commande }> => {
+    const response = await api.patch(`/admin/orders/${id}/status`, { statut });
+    return response.data;
+  },
+  
+  // Urgences
+  getEmergencies: async (): Promise<Urgence[]> => {
+    const response = await api.get('/admin/emergencies');
+    return response.data;
+  },
+  
+  getEmergency: async (id: number): Promise<Urgence> => {
+    const response = await api.get(`/admin/emergencies/${id}`);
+    return response.data;
+  },
+  
+  updateEmergencyStatus: async (id: number, statut: string, ambulancier_id?: number): Promise<{ success: boolean; urgence: Urgence }> => {
+    const response = await api.patch(`/admin/emergencies/${id}/status`, { statut, ambulancier_id });
     return response.data;
   },
 };

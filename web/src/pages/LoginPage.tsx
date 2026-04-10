@@ -240,24 +240,7 @@ const LoginPage: React.FC = () => {
                   <p className="text-zinc-500 text-sm mt-1">Connectez-vous à votre espace MIAINA</p>
                 </div>
                 
-                <div className="mb-6">
-                  <label className="text-sm text-zinc-400 mb-2 block">Je me connecte en tant que</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['patient', 'ambulancier', 'pharmacien'] as const).map((role) => (
-                      <div
-                        key={role}
-                        onClick={() => setLoginRole(role)}
-                        className={`role-selector p-3 rounded-xl text-center transition ${loginRole === role ? 'active' : ''}`}
-                      >
-                        <i className={`fas ${role === 'patient' ? 'fa-user' : role === 'ambulancier' ? 'fa-ambulance' : 'fa-pills'} text-lg mb-1 block`}></i>
-                        <span className="text-xs font-medium text-white">
-                          {role === 'patient' ? 'Patient' : role === 'ambulancier' ? 'Ambulancier' : 'Pharmacien'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
+              
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div>
                     <label className="text-sm text-zinc-400 mb-1.5 block">Téléphone ou email</label>
@@ -323,23 +306,6 @@ const LoginPage: React.FC = () => {
                   <p className="text-zinc-500 text-sm mt-1">Rejoignez la communauté MIAINA</p>
                 </div>
 
-                <div className="mb-5">
-                  <label className="text-sm text-zinc-400 mb-2 block">Type de compte</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['patient', 'ambulancier', 'pharmacien'] as const).map((role) => (
-                      <div
-                        key={role}
-                        onClick={() => setRegisterRole(role)}
-                        className={`role-selector p-3 rounded-xl text-center transition ${registerRole === role ? 'active' : ''}`}
-                      >
-                        <i className={`fas ${role === 'patient' ? 'fa-user' : role === 'ambulancier' ? 'fa-ambulance' : 'fa-pills'} text-lg mb-1 block`}></i>
-                        <span className="text-xs font-medium text-white">
-                          {role === 'patient' ? 'Patient' : role === 'ambulancier' ? 'Ambulancier' : 'Pharmacien'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
 
                 <form onSubmit={handleRegister} className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
                   {registerRole === 'patient' && (

@@ -290,7 +290,8 @@ const renderMapMarkers = (filter: string) => {
   const sendSOSOnline = async () => {
     setLoading(true);
     try {
-      await emergencyService.sendSMSAlert({
+      // Utiliser createUrgence (méthode existante) pour créer/enregistrer l'urgence côté serveur
+      await emergencyService.createUrgence({
         latitude: TANA[0],
         longitude: TANA[1],
         type_urgence: sosType,
