@@ -3,9 +3,33 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // NOUVEL IMPORT : La bibliothèque d'icônes d'Expo
 import { Ionicons } from '@expo/vector-icons'; 
+
+export default function App() {
+  const [token, setToken] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadToken = async () => {
+      const storedToken = await AsyncStorage.getItem('token');
+      setToken(storedToken);
+      setLoading(false);
+    };
+    loadToken();
+  }, []);
+
+  if (loading) return null;
+
+  return (
+    <NavigationContainer>
+      {token ? <MainTabs /> : <AuthStack />}
+    </NavigationContainer>
+  );
+}
 
 // Import des écrans principaux (Tabs)
 import HomeScreen from './src/screens/HomeScreen';
