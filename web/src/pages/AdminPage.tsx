@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import L from 'leaflet';
 import Chart from 'chart.js/auto';
 import { useAuth } from '../hooks/useAuth';
+import { useTheme } from '../contexts/ThemeContexte';
 import { useToast } from '../hooks/useToast';
 import { adminService, pharmacyService, emergencyService } from '../services/api';
 import socketService from '../services/socket';
@@ -85,15 +86,24 @@ interface Emergency {
   assigned: string | null;
 }
 
+
+
 const AdminPage: React.FC = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const { toasts, showToast, removeToast } = useToast();
   
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  
+  // Modal states
   const [showMedicineModal, setShowMedicineModal] = useState(false);
+  const [showAmbulanceModal, setShowAmbulanceModal] = useState(false);
+  const [showHospitalModal, setShowHospitalModal] = useState(false);
+  const [showPharmacyModal, setShowPharmacyModal] = useState(false);
+  const [showUserModal, setShowUserModal] = useState(false);
   
   // Data
   const [medicines, setMedicines] = useState<Medicine[]>([
@@ -104,8 +114,9 @@ const AdminPage: React.FC = () => {
     { id: 5, name: 'Aspirine 100mg', desc: 'Anticoagulant', cat: 'Cardiovasculaire', price: 4000, stock: 200, rx: false },
     { id: 6, name: 'Oméprazole 20mg', desc: 'Anti-ulcéreux', cat: 'Gastro', price: 6500, stock: 8, rx: true },
     { id: 7, name: 'Azithromycine 250mg', desc: 'Antibiotique', cat: 'Antibiotique', price: 12000, stock: 5, rx: true },
-    { id: 8, name: 'Vitamine C 500mg', desc: 'Supplément', cat: 'Vitamines', price: 3500, stock: 150, rx: false }
-  ]);
+    { id: 8, name: 'Vitamine C 500mg', desc: 'Supplément', cat: 'Vitamines', price: 3500, stock: 150, rx: false },
+    { id: 9, name: 'Vitamine B 500mg', desc: 'Supplément', cat: 'Vitamines', price: 3500, stock: 15000000, rx: false }
+]);
   
   const [ambulances, setAmbulances] = useState<Ambulance[]>([
     { id: 1, name: 'AMB-001', lat: -18.8800, lng: 47.5180, status: 'DISPONIBLE', driver: 'Rakoto P.', phone: '+261 34 12 345 67' },
@@ -169,7 +180,7 @@ const AdminPage: React.FC = () => {
       socketService.off('new-emergency');
       socketService.off('new-bip');
     };
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (currentPage === 'ambulances') {
@@ -212,21 +223,31 @@ const AdminPage: React.FC = () => {
       adminMapRef.current = null;
     }
     
-    adminMapRef.current = L.map('adminAmbulanceMap', { attributionControl: false }).setView(TANA, 13);
+    adminMapRef.current = L.map('adminAmbulanceMap', { 
+      attributionControl: false,
+      zoomControl: true 
+    }).setView(TANA, 13);
+    
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(adminMapRef.current);
     
     ambulances.forEach(a => {
-      const color = a.status === 'DISPONIBLE' ? '#10b981' : '#52525b';
-      const icon = L.divIcon({
-        className: '',
-        html: `<div class="ambulance-marker" style="background:${color}"><i class="fas fa-ambulance text-white"></i></div>`,
-        iconSize: [40, 40],
-        iconAnchor: [20, 20]
-      });
-      L.marker([a.lat, a.lng], { icon }).addTo(adminMapRef.current!).bindPopup(`<b>${a.name}</b><br>${a.driver}<br>Statut: ${a.status === 'DISPONIBLE' ? 'Disponible' : 'En intervention'}`);
+      if (a.lat && a.lng) {
+        const color = a.status === 'DISPONIBLE' ? '#10b981' : '#52525b';
+        const icon = L.divIcon({
+          className: '',
+          html: `<div class="ambulance-marker" style="background:${color}"><i class="fas fa-ambulance text-white"></i></div>`,
+          iconSize: [40, 40],
+          iconAnchor: [20, 20]
+        });
+        L.marker([a.lat, a.lng], { icon }).addTo(adminMapRef.current!).bindPopup(`<b>${a.name}</b><br>${a.driver}<br>Statut: ${a.status === 'DISPONIBLE' ? 'Disponible' : 'En intervention'}`);
+      }
     });
     
-    setTimeout(() => adminMapRef.current?.invalidateSize(), 200);
+    setTimeout(() => {
+      if (adminMapRef.current) {
+        adminMapRef.current.invalidateSize();
+      }
+    }, 200);
   };
 
   const renderCharts = () => {
@@ -408,7 +429,6 @@ const AdminPage: React.FC = () => {
       `;
     }).join('');
     
-    // Update stats
     const totalProducts = document.getElementById('totalProducts');
     if (totalProducts) totalProducts.textContent = medicines.length.toString();
     const lowStockCount = document.getElementById('lowStockCount');
@@ -465,6 +485,85 @@ const AdminPage: React.FC = () => {
     renderCharts();
   };
 
+  const addAmbulance = () => {
+    const name = (document.getElementById('ambName') as HTMLInputElement)?.value;
+    const driver = (document.getElementById('ambDriver') as HTMLInputElement)?.value;
+    const phone = (document.getElementById('ambPhone') as HTMLInputElement)?.value;
+    const lat = parseFloat((document.getElementById('ambLat') as HTMLInputElement)?.value) || -18.8792;
+    const lng = parseFloat((document.getElementById('ambLng') as HTMLInputElement)?.value) || 47.5200;
+    
+    if (!name || !driver || !phone) {
+      showToast('Veuillez remplir les champs obligatoires', 'error');
+      return;
+    }
+    
+    const newId = Math.max(...ambulances.map(a => a.id)) + 1;
+    setAmbulances(prev => [...prev, { id: newId, name, driver, phone, lat, lng, status: 'DISPONIBLE' }]);
+    setShowAmbulanceModal(false);
+    showToast(`Ambulance ${name} ajoutée`, 'success');
+    initAmbulanceMap();
+  };
+
+  const addHospital = () => {
+    const name = (document.getElementById('hospName') as HTMLInputElement)?.value;
+    const phone = (document.getElementById('hospPhone') as HTMLInputElement)?.value;
+    const lat = parseFloat((document.getElementById('hospLat') as HTMLInputElement)?.value) || -18.8792;
+    const lng = parseFloat((document.getElementById('hospLng') as HTMLInputElement)?.value) || 47.5200;
+    const capacity = parseInt((document.getElementById('hospCapacity') as HTMLInputElement)?.value) || 100;
+    const emergency = (document.getElementById('hospEmergency') as HTMLInputElement)?.checked;
+    
+    if (!name || !phone) {
+      showToast('Veuillez remplir les champs obligatoires', 'error');
+      return;
+    }
+    
+    const newId = Math.max(...hospitals.map(h => h.id)) + 1;
+    setHospitals(prev => [...prev, { id: newId, name, phone, lat, lng, capacity, emergency }]);
+    setShowHospitalModal(false);
+    showToast(`${name} ajouté`, 'success');
+  };
+
+  const addPharmacy = () => {
+    const name = (document.getElementById('pharmName') as HTMLInputElement)?.value;
+    const phone = (document.getElementById('pharmPhone') as HTMLInputElement)?.value;
+    const lat = parseFloat((document.getElementById('pharmLat') as HTMLInputElement)?.value) || -18.8792;
+    const lng = parseFloat((document.getElementById('pharmLng') as HTMLInputElement)?.value) || 47.5200;
+    const delivery = (document.getElementById('pharmDelivery') as HTMLInputElement)?.checked;
+    
+    if (!name || !phone) {
+      showToast('Veuillez remplir les champs obligatoires', 'error');
+      return;
+    }
+    
+    const newId = Math.max(...pharmacies.map(p => p.id)) + 1;
+    setPharmacies(prev => [...prev, { id: newId, name, phone, lat, lng, online: true, delivery }]);
+    setShowPharmacyModal(false);
+    showToast(`${name} ajoutée`, 'success');
+  };
+
+  const addUser = () => {
+    const nom = (document.getElementById('userNom') as HTMLInputElement)?.value;
+    const prenom = (document.getElementById('userPrenom') as HTMLInputElement)?.value;
+    const email = (document.getElementById('userEmail') as HTMLInputElement)?.value;
+    const phone = (document.getElementById('userPhone') as HTMLInputElement)?.value;
+    const role = (document.getElementById('userRole') as HTMLSelectElement)?.value;
+    const gender = (document.getElementById('userGender') as HTMLSelectElement)?.value;
+    const blood = (document.getElementById('userBlood') as HTMLSelectElement)?.value;
+    
+    if (!nom || !prenom || !email) {
+      showToast('Veuillez remplir les champs obligatoires', 'error');
+      return;
+    }
+    
+    const newId = Math.max(...users.map(u => u.id)) + 1;
+    setUsers(prev => [...prev, { 
+      id: newId, email, name: `${prenom} ${nom}`, phone, role, gender, blood, 
+      active: true, created: new Date().toISOString().split('T')[0] 
+    }]);
+    setShowUserModal(false);
+    showToast(`Utilisateur ${prenom} ${nom} ajouté`, 'success');
+  };
+
   const toggleAmbulance = (id: number) => {
     setAmbulances(prev => prev.map(a => a.id === id ? { ...a, status: a.status === 'DISPONIBLE' ? 'EN_INTERVENTION' : 'DISPONIBLE' } : a));
     initAmbulanceMap();
@@ -511,7 +610,6 @@ const AdminPage: React.FC = () => {
     navigate('/login');
   };
 
-  // Expose functions to window
   React.useEffect(() => {
     (window as any).editStock = editStock;
     (window as any).updateStockQuantity = updateStockQuantity;
@@ -586,22 +684,30 @@ const AdminPage: React.FC = () => {
             ))}
           </nav>
           <div className="p-4 border-t border-zinc-800">
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-zinc-800/50">
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-zinc-800/50">
               <div className="w-10 h-10 rounded-full bg-danger/20 flex items-center justify-center"><i className="fas fa-user-shield text-danger"></i></div>
               <div className="flex-1"><p className="text-sm font-semibold">{user?.nom || 'Admin'}</p><p className="text-[10px] text-zinc-500">{user?.niveau_acces || 'Super Admin'}</p></div>
-              <button onClick={handleLogout} className="text-zinc-400 hover:text-danger transition"><i className="fas fa-sign-out-alt"></i></button>
+              <div className="flex items-center gap-2">
+                <button onClick={toggleTheme} className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center mr-1">
+                  <i className={`fas ${theme === 'dark' ? 'fa-sun' : 'fa-moon'} text-zinc-400 text-sm`}></i>
+                </button>
+                <button onClick={handleLogout} className="text-zinc-400 hover:text-danger transition"><i className="fas fa-sign-out-alt"></i></button>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Header Mobile */}
-        <div className="lg:hidden fixed top-0 left-0 right-0 z-30 glass px-4 py-3 flex items-center justify-between">
+          <div className="lg:hidden fixed top-0 left-0 right-0 z-30 glass px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button onClick={() => setMobileMenuOpen(true)} className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center"><i className="fas fa-bars text-zinc-400"></i></button>
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-danger to-orange-500 flex items-center justify-center"><i className="fas fa-heartbeat text-white"></i></div>
             <p className="font-bold">MIAINA Admin</p>
           </div>
-          <button onClick={handleLogout} className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center"><i className="fas fa-sign-out-alt text-zinc-400"></i></button>
+          <div className="flex items-center gap-2">
+            <button onClick={toggleTheme} className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center"><i className={`fas ${theme === 'dark' ? 'fa-sun' : 'fa-moon'} text-zinc-400 text-sm`}></i></button>
+            <button onClick={handleLogout} className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center"><i className="fas fa-sign-out-alt text-zinc-400"></i></button>
+          </div>
         </div>
 
         {/* Mobile Menu */}
@@ -701,7 +807,7 @@ const AdminPage: React.FC = () => {
             <div>
               <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
                 <div><h1 className="text-2xl font-bold">Gestion des ambulances</h1><p className="text-zinc-400 text-sm">Suivi en temps réel</p></div>
-                <button onClick={() => showToast('Formulaire d\'ajout d\'ambulance', 'info')} className="px-5 py-2.5 bg-success text-white rounded-xl text-sm font-semibold hover:bg-green-600 transition"><i className="fas fa-plus mr-2"></i>Ajouter</button>
+                <button onClick={() => setShowAmbulanceModal(true)} className="px-5 py-2.5 bg-success text-white rounded-xl text-sm font-semibold hover:bg-green-600 transition"><i className="fas fa-plus mr-2"></i>Ajouter</button>
               </div>
               <div id="adminAmbulanceMap" className="h-72 md:h-80 rounded-2xl overflow-hidden border border-zinc-800 mb-6"></div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -733,7 +839,7 @@ const AdminPage: React.FC = () => {
             <div>
               <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
                 <div><h1 className="text-2xl font-bold">Gestion des hôpitaux</h1><p className="text-zinc-400 text-sm">Établissements partenaires</p></div>
-                <button onClick={() => showToast('Formulaire d\'ajout d\'hôpital', 'info')} className="px-5 py-2.5 bg-info text-white rounded-xl text-sm font-semibold hover:bg-cyan-600 transition"><i className="fas fa-plus mr-2"></i>Ajouter</button>
+                <button onClick={() => setShowHospitalModal(true)} className="px-5 py-2.5 bg-info text-white rounded-xl text-sm font-semibold hover:bg-cyan-600 transition"><i className="fas fa-plus mr-2"></i>Ajouter</button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {hospitals.map(h => (
@@ -757,7 +863,7 @@ const AdminPage: React.FC = () => {
             <div>
               <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
                 <div><h1 className="text-2xl font-bold">Gestion des pharmacies</h1><p className="text-zinc-400 text-sm">Pharmacies partenaires</p></div>
-                <button onClick={() => showToast('Formulaire d\'ajout de pharmacie', 'info')} className="px-5 py-2.5 bg-warn text-black rounded-xl text-sm font-semibold hover:bg-amber-600 transition"><i className="fas fa-plus mr-2"></i>Ajouter</button>
+                <button onClick={() => setShowPharmacyModal(true)} className="px-5 py-2.5 bg-warn text-black rounded-xl text-sm font-semibold hover:bg-amber-600 transition"><i className="fas fa-plus mr-2"></i>Ajouter</button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {pharmacies.map(p => (
@@ -909,7 +1015,7 @@ const AdminPage: React.FC = () => {
             <div>
               <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
                 <div><h1 className="text-2xl font-bold">Gestion des utilisateurs</h1><p className="text-zinc-400 text-sm">Patients et personnel</p></div>
-                <button onClick={() => showToast('Formulaire d\'ajout d\'utilisateur', 'info')} className="px-5 py-2.5 bg-success text-white rounded-xl text-sm font-semibold hover:bg-green-600 transition"><i className="fas fa-user-plus mr-2"></i>Ajouter</button>
+                <button onClick={() => setShowUserModal(true)} className="px-5 py-2.5 bg-success text-white rounded-xl text-sm font-semibold hover:bg-green-600 transition"><i className="fas fa-user-plus mr-2"></i>Ajouter</button>
               </div>
               <div className="space-y-3">
                 {users.map(u => (
@@ -952,6 +1058,8 @@ const AdminPage: React.FC = () => {
         </div>
       </div>
 
+      {/* ==================== MODALS ==================== */}
+
       {/* Medicine Modal */}
       {showMedicineModal && (
         <div className="modal-overlay show" onClick={() => setShowMedicineModal(false)}>
@@ -978,7 +1086,137 @@ const AdminPage: React.FC = () => {
               <div className="flex gap-2">
                 <label className="flex items-center gap-2"><input type="checkbox" id="medRx" /> <span className="text-sm">Nécessite ordonnance</span></label>
               </div>
-              <button onClick={addMedicine} className="w-full bg-success text-white py-3 rounded-xl font-semibold">Ajouter</button>
+              <button onClick={addMedicine} className="w-full bg-success text-white py-3 rounded-xl font-semibold">Ajouter le médicament</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ambulance Modal */}
+      {showAmbulanceModal && (
+        <div className="modal-overlay show" onClick={() => setShowAmbulanceModal(false)}>
+          <div className="modal-content p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold"><i className="fas fa-ambulance mr-2 text-success"></i>Ajouter une ambulance</h3>
+              <button onClick={() => setShowAmbulanceModal(false)} className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center"><i className="fas fa-times text-zinc-400"></i></button>
+            </div>
+            <div className="space-y-4">
+              <input type="text" id="ambName" placeholder="Nom de l'ambulance (ex: AMB-006)" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+              <input type="text" id="ambDriver" placeholder="Nom du chauffeur" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+              <input type="tel" id="ambPhone" placeholder="Téléphone" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+              <input type="text" id="ambMatricule" placeholder="Matricule" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+              <select id="ambZone" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white">
+                <option value="Tana Nord">Zone Tana Nord</option>
+                <option value="Tana Sud">Zone Tana Sud</option>
+                <option value="Tana Est">Zone Tana Est</option>
+                <option value="Tana Ouest">Zone Tana Ouest</option>
+              </select>
+              <div className="grid grid-cols-2 gap-3">
+                <input type="number" id="ambLat" placeholder="Latitude" step="0.000001" defaultValue="-18.8792" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+                <input type="number" id="ambLng" placeholder="Longitude" step="0.000001" defaultValue="47.5200" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+              </div>
+              <input type="password" id="ambPassword" placeholder="Mot de passe" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+              <button onClick={addAmbulance} className="w-full bg-success text-white py-3 rounded-xl font-semibold">Ajouter l'ambulance</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hospital Modal */}
+      {showHospitalModal && (
+        <div className="modal-overlay show" onClick={() => setShowHospitalModal(false)}>
+          <div className="modal-content p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold"><i className="fas fa-hospital mr-2 text-info"></i>Ajouter un hôpital</h3>
+              <button onClick={() => setShowHospitalModal(false)} className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center"><i className="fas fa-times text-zinc-400"></i></button>
+            </div>
+            <div className="space-y-4">
+              <input type="text" id="hospName" placeholder="Nom de l'hôpital" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+              <input type="tel" id="hospPhone" placeholder="Téléphone" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+              <input type="text" id="hospAddress" placeholder="Adresse" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+              <div className="grid grid-cols-2 gap-3">
+                <input type="number" id="hospLat" placeholder="Latitude" step="0.000001" defaultValue="-18.8792" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+                <input type="number" id="hospLng" placeholder="Longitude" step="0.000001" defaultValue="47.5200" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <input type="number" id="hospCapacity" placeholder="Capacité (lits)" defaultValue="100" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+                <select id="hospType" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white">
+                  <option value="HOPITAL">Hôpital</option>
+                  <option value="CLINIQUE">Clinique</option>
+                  <option value="CSB">CSB</option>
+                  <option value="DISPENSAIRE">Dispensaire</option>
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <label className="flex items-center gap-2"><input type="checkbox" id="hospEmergency" defaultChecked /> <span className="text-sm">Urgences 24/7</span></label>
+              </div>
+              <button onClick={addHospital} className="w-full bg-info text-white py-3 rounded-xl font-semibold">Ajouter l'hôpital</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pharmacy Modal */}
+      {showPharmacyModal && (
+        <div className="modal-overlay show" onClick={() => setShowPharmacyModal(false)}>
+          <div className="modal-content p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold"><i className="fas fa-pills mr-2 text-warn"></i>Ajouter une pharmacie</h3>
+              <button onClick={() => setShowPharmacyModal(false)} className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center"><i className="fas fa-times text-zinc-400"></i></button>
+            </div>
+            <div className="space-y-4">
+              <input type="text" id="pharmName" placeholder="Nom de la pharmacie" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+              <input type="text" id="pharmResp" placeholder="Nom du responsable" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+              <input type="tel" id="pharmPhone" placeholder="Téléphone" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+              <input type="email" id="pharmEmail" placeholder="Email" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+              <input type="text" id="pharmAddress" placeholder="Adresse" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+              <div className="grid grid-cols-2 gap-3">
+                <input type="number" id="pharmLat" placeholder="Latitude" step="0.000001" defaultValue="-18.8792" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+                <input type="number" id="pharmLng" placeholder="Longitude" step="0.000001" defaultValue="47.5200" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+              </div>
+              <input type="password" id="pharmPassword" placeholder="Mot de passe" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+              <div className="flex gap-2">
+                <label className="flex items-center gap-2"><input type="checkbox" id="pharmDelivery" defaultChecked /> <span className="text-sm">Livraison disponible</span></label>
+              </div>
+              <button onClick={addPharmacy} className="w-full bg-warn text-black py-3 rounded-xl font-semibold">Ajouter la pharmacie</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Modal */}
+      {showUserModal && (
+        <div className="modal-overlay show" onClick={() => setShowUserModal(false)}>
+          <div className="modal-content p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold"><i className="fas fa-user-plus mr-2 text-success"></i>Ajouter un utilisateur</h3>
+              <button onClick={() => setShowUserModal(false)} className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center"><i className="fas fa-times text-zinc-400"></i></button>
+            </div>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <input type="text" id="userNom" placeholder="Nom" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+                <input type="text" id="userPrenom" placeholder="Prénom" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+              </div>
+              <input type="email" id="userEmail" placeholder="Email" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+              <input type="tel" id="userPhone" placeholder="Téléphone" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+              <select id="userRole" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white">
+                <option value="PATIENT">Patient</option>
+                <option value="AMBULANCIER">Ambulancier</option>
+                <option value="PHARMACIEN">Pharmacien</option>
+                <option value="ADMIN">Administrateur</option>
+              </select>
+              <select id="userGender" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white">
+                <option value="MASCULIN">Masculin</option>
+                <option value="FEMININ">Féminin</option>
+              </select>
+              <select id="userBlood" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white">
+                <option value="A+">A+</option><option value="A-">A-</option>
+                <option value="B+">B+</option><option value="B-">B-</option>
+                <option value="O+">O+</option><option value="O-">O-</option>
+                <option value="AB+">AB+</option><option value="AB-">AB-</option>
+              </select>
+              <input type="password" id="userPassword" placeholder="Mot de passe" className="w-full bg-zinc-800 border-zinc-700 rounded-xl p-3 text-white" />
+              <button onClick={addUser} className="w-full bg-success text-white py-3 rounded-xl font-semibold">Ajouter l'utilisateur</button>
             </div>
           </div>
         </div>

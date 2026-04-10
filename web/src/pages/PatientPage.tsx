@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import L from 'leaflet';
 import Chart from 'chart.js/auto';
 import { useAuth } from '../hooks/useAuth';
+import { useTheme } from '../contexts/ThemeContexte';
 import { useToast } from '../hooks/useToast';
 import { emergencyService, pharmacyService, wellnessService } from '../services/api';
 import socketService from '../services/socket';
@@ -35,6 +36,7 @@ interface Pharmacy {
 const PatientPage: React.FC = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const { toasts, showToast, removeToast } = useToast();
   
   const [currentPage, setCurrentPage] = useState<'home' | 'urgence' | 'pharmacie' | 'bienetre' | 'profil'>('home');
@@ -185,21 +187,27 @@ const PatientPage: React.FC = () => {
     return Math.round(moodHistory.reduce((a, b) => a + b.score, 0) / moodHistory.length * 10) / 10;
   };
 
-  const initHomeMap = () => {
-    const mapEl = document.getElementById('homeMap');
-    if (!mapEl || homeMapRef.current) return;
-    
-    homeMapRef.current = L.map('homeMap', { zoomControl: false, attributionControl: false }).setView(TANA, 14);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(homeMapRef.current);
-    
-    const userIcon = L.divIcon({ className: '', html: '<div class="user-marker"></div>', iconSize: [20, 20], iconAnchor: [10, 10] });
-    L.marker(TANA, { icon: userIcon }).addTo(homeMapRef.current);
-    
-    hospitals.slice(0, 3).forEach(h => {
+ const initHomeMap = () => {
+  const mapEl = document.getElementById('homeMap');
+  if (!mapEl || homeMapRef.current) return;
+  
+  homeMapRef.current = L.map('homeMap', { zoomControl: false, attributionControl: false }).setView(TANA, 14);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(homeMapRef.current);
+  
+  const userIcon = L.divIcon({ className: '', html: '<div class="user-marker"></div>', iconSize: [20, 20], iconAnchor: [10, 10] });
+  L.marker(TANA, { icon: userIcon }).addTo(homeMapRef.current);
+  
+  hospitals.slice(0, 3).forEach(h => {
+    const lat = h.latitude || -18.88;
+    const lng = h.longitude || 47.52;
+    if (lat && lng) {
       const icon = L.divIcon({ className: '', html: '<div class="hospital-marker"><i class="fas fa-hospital text-white"></i></div>', iconSize: [32, 32], iconAnchor: [16, 16] });
-      L.marker([h.latitude || -18.88, h.longitude || 47.52], { icon }).addTo(homeMapRef.current!).bindPopup(`<b>${h.nom}</b>`);
-    });
-  };
+      L.marker([lat, lng], { icon }).addTo(homeMapRef.current!).bindPopup(`<b>${h.nom}</b>`);
+    }
+  });
+  
+  setTimeout(() => homeMapRef.current?.invalidateSize(), 200);
+};
 
   const initUrgenceMap = () => {
     const mapEl = document.getElementById('urgenceMap');
@@ -219,33 +227,57 @@ const PatientPage: React.FC = () => {
     renderMapMarkers('all');
   };
 
-  const renderMapMarkers = (filter: string) => {
-    if (!urgenceMapRef.current) return;
-    
-    urgenceMapRef.current.eachLayer(l => { if (l instanceof L.Marker && l.getPopup()) urgenceMapRef.current!.removeLayer(l); });
-    
-    if (filter === 'all' || filter === 'hospital') {
-      hospitals.forEach(h => {
-        const icon = L.divIcon({ className: '', html: '<div class="hospital-marker"><i class="fas fa-hospital text-white"></i></div>', iconSize: [32, 32], iconAnchor: [16, 16] });
-        L.marker([h.latitude || -18.88, h.longitude || 47.52], { icon }).addTo(urgenceMapRef.current!).bindPopup(`<b>${h.nom}</b><br><i class="fas fa-phone"></i> ${h.telephone}`);
-      });
+const renderMapMarkers = (filter: string) => {
+  if (!urgenceMapRef.current) return;
+  
+  // Nettoyer les markers existants
+  urgenceMapRef.current.eachLayer(l => { 
+    if (l instanceof L.Marker) {
+      urgenceMapRef.current!.removeLayer(l);
     }
-    
-    if (filter === 'all' || filter === 'ambulance') {
-      ambulances.forEach(a => {
+  });
+  
+  // Remettre le marker utilisateur
+  const userIcon = L.divIcon({ className: '', html: '<div class="user-marker"></div>', iconSize: [20, 20], iconAnchor: [10, 10] });
+  L.marker(TANA, { icon: userIcon }).addTo(urgenceMapRef.current);
+  
+  // Ajouter les hôpitaux
+  if (filter === 'all' || filter === 'hospital') {
+    hospitals.forEach(h => {
+      const lat = h.latitude || -18.88;
+      const lng = h.longitude || 47.52;
+      if (lat && lng) {
+        const icon = L.divIcon({ className: '', html: '<div class="hospital-marker"><i class="fas fa-hospital text-white"></i></div>', iconSize: [32, 32], iconAnchor: [16, 16] });
+        L.marker([lat, lng], { icon }).addTo(urgenceMapRef.current!).bindPopup(`<b>${h.nom}</b><br><i class="fas fa-phone"></i> ${h.telephone}`);
+      }
+    });
+  }
+  
+  // Ajouter les ambulances
+  if (filter === 'all' || filter === 'ambulance') {
+    ambulances.forEach(a => {
+      const lat = a.lat || -18.88;
+      const lng = a.lng || 47.52;
+      if (lat && lng) {
         const color = a.status === 'DISPONIBLE' ? '#10b981' : '#52525b';
         const icon = L.divIcon({ className: '', html: `<div class="ambulance-marker" style="background:${color}"><i class="fas fa-ambulance text-white"></i></div>`, iconSize: [40, 40], iconAnchor: [20, 20] });
-        L.marker([a.lat, a.lng], { icon }).addTo(urgenceMapRef.current!).bindPopup(`<b>${a.name}</b><br>Chauffeur: ${a.driver}<br>Statut: ${a.status}<br><i class="fas fa-phone"></i> ${a.phone}`);
-      });
-    }
-    
-    if (filter === 'all' || filter === 'pharmacy') {
-      pharmacies.forEach(p => {
+        L.marker([lat, lng], { icon }).addTo(urgenceMapRef.current!).bindPopup(`<b>${a.name}</b><br>Chauffeur: ${a.driver}<br>Statut: ${a.status}<br><i class="fas fa-phone"></i> ${a.phone}`);
+      }
+    });
+  }
+  
+  // Ajouter les pharmacies
+  if (filter === 'all' || filter === 'pharmacy') {
+    pharmacies.forEach(p => {
+      const lat = p.lat || -18.88;
+      const lng = p.lng || 47.52;
+      if (lat && lng) {
         const icon = L.divIcon({ className: '', html: '<div class="pharmacy-marker"><i class="fas fa-pills text-white"></i></div>', iconSize: [32, 32], iconAnchor: [16, 16] });
-        L.marker([p.lat, p.lng], { icon }).addTo(urgenceMapRef.current!).bindPopup(`<b>${p.name}</b><br><i class="fas fa-phone"></i> ${p.phone}<br>${p.online ? '🟢 En ligne' : '🔴 Hors ligne'}`);
-      });
-    }
-  };
+        L.marker([lat, lng], { icon }).addTo(urgenceMapRef.current!).bindPopup(`<b>${p.name}</b><br><i class="fas fa-phone"></i> ${p.phone}<br>${p.online ? '🟢 En ligne' : '🔴 Hors ligne'}`);
+      }
+    });
+  }
+};
 
   const filterMap = (filter: string) => {
     renderMapMarkers(filter);
@@ -654,6 +686,9 @@ const PatientPage: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
+            <button onClick={toggleTheme} className="w-9 h-9 sm:w-9 sm:h-9 rounded-full bg-zinc-800 flex items-center justify-center">
+              <i className={`fas ${theme === 'dark' ? 'fa-sun' : 'fa-moon'} text-zinc-400 text-xs sm:text-sm`}></i>
+            </button>
             <button onClick={() => setShowNotifModal(true)} className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-zinc-800 flex items-center justify-center">
               <i className="fas fa-bell text-zinc-400 text-xs sm:text-sm"></i>
               {notifications.filter(n => !n.lu).length > 0 && (

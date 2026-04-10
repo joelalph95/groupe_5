@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { useTheme } from '../contexts/ThemeContexte';
 import { useToast } from '../hooks/useToast';
 import Toast from '../components/common/Toast';
 import Loading from '../components/common/Loading';
@@ -8,6 +9,7 @@ import Loading from '../components/common/Loading';
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { login, register } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const { toasts, showToast, removeToast } = useToast();
   
   const [isLogin, setIsLogin] = useState(true);
@@ -170,6 +172,12 @@ const LoginPage: React.FC = () => {
         {toasts.map(toast => (
           <Toast key={toast.id} toast={toast} onClose={removeToast} />
         ))}
+      </div>
+
+      <div className="fixed top-6 right-6 z-50">
+        <button onClick={toggleTheme} className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center">
+          <i className={`fas ${theme === 'dark' ? 'fa-sun' : 'fa-moon'} text-zinc-400 text-sm`}></i>
+        </button>
       </div>
 
       <div className="fixed inset-0 overflow-hidden pointer-events-none">

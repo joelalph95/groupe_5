@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import L from 'leaflet';
 import { useAuth } from '../hooks/useAuth';
+import { useTheme } from '../contexts/ThemeContexte';
 import { useToast } from '../hooks/useToast';
 import { emergencyService } from '../services/api';
 import socketService from '../services/socket';
@@ -31,6 +32,7 @@ interface Hospital {
 const AmbulancePage: React.FC = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const { toasts, showToast, removeToast } = useToast();
   
   const [loading, setLoading] = useState(false);
@@ -494,9 +496,14 @@ const AmbulancePage: React.FC = () => {
                 {currentTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
-            <button onClick={handleLogout} className="ml-2 w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center hover:bg-zinc-600 transition">
-              <i className="fas fa-sign-out-alt text-zinc-300 text-xs"></i>
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={toggleTheme} className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center">
+                <i className={`fas ${theme === 'dark' ? 'fa-sun' : 'fa-moon'} text-zinc-300 text-xs`}></i>
+              </button>
+              <button onClick={handleLogout} className="ml-2 w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center hover:bg-zinc-600 transition">
+                <i className="fas fa-sign-out-alt text-zinc-300 text-xs"></i>
+              </button>
+            </div>
           </div>
         </div>
 

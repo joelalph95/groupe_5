@@ -7,12 +7,14 @@ import AmbulancePage from './pages/AmbulancePage';
 import AdminPage from './pages/AdminPage';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import './styles/globals.css';
+import { ThemeProvider } from './contexts/ThemeContexte';
 
 function App() {
   return (
     <Router>
       <AuthProvider>
-        <Routes>
+        <ThemeProvider>
+          <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/patient" element={
             <ProtectedRoute allowedRoles={['PATIENT']}>
@@ -30,7 +32,8 @@ function App() {
             </ProtectedRoute>
           } />
           <Route path="/" element={<Navigate to="/login" replace />} />
-        </Routes>
+          </Routes>
+        </ThemeProvider>
       </AuthProvider>
     </Router>
   );
