@@ -15,8 +15,12 @@ const CentreSante = require('./CentreSante');
 const Article = require('./Article');
 const Rappel = require('./Rappel');
 const Notification = require('./Notification');
+const SuiviSante = require('./SuiviSante');
 
-// Associations existantes
+
+
+// Définir les associations DANS LE BON ORDRE
+// 1. Associations de base
 Patient.hasMany(Urgence, { foreignKey: 'patient_id' });
 Urgence.belongsTo(Patient, { foreignKey: 'patient_id' });
 
@@ -35,24 +39,31 @@ ChatbotHistory.belongsTo(Patient, { foreignKey: 'patient_id' });
 Patient.hasMany(Rappel, { foreignKey: 'patient_id' });
 Rappel.belongsTo(Patient, { foreignKey: 'patient_id' });
 
+// 2. Associations des ambulanciers
 Ambulancier.hasMany(Urgence, { foreignKey: 'ambulancier_id' });
 Urgence.belongsTo(Ambulancier, { foreignKey: 'ambulancier_id' });
 
+// 3. Associations des pharmaciens (ordre important)
 Pharmacien.hasMany(Medicament, { foreignKey: 'pharmacien_id' });
 Medicament.belongsTo(Pharmacien, { foreignKey: 'pharmacien_id' });
 
 Pharmacien.hasMany(Commande, { foreignKey: 'pharmacien_id' });
 Commande.belongsTo(Pharmacien, { foreignKey: 'pharmacien_id' });
 
+// 4. Associations des commandes
 Commande.hasMany(CommandeDetail, { foreignKey: 'commande_id', onDelete: 'CASCADE' });
 CommandeDetail.belongsTo(Commande, { foreignKey: 'commande_id' });
 
 Medicament.hasMany(CommandeDetail, { foreignKey: 'medicament_id' });
 CommandeDetail.belongsTo(Medicament, { foreignKey: 'medicament_id' });
 
-// Nouvelles associations
+// 5. Associations des articles
 Admin.hasMany(Article, { foreignKey: 'admin_id' });
 Article.belongsTo(Admin, { foreignKey: 'admin_id' });
+
+
+Patient.hasMany(SuiviSante, { foreignKey: 'patient_id' });
+SuiviSante.belongsTo(Patient, { foreignKey: 'patient_id' });
 
 const db = {
   sequelize,
@@ -66,6 +77,7 @@ const db = {
   CommandeDetail,
   Urgence,
   SuiviGrossesse,
+  SuiviSante,
   SuiviPatient,
   ChatbotHistory,
   CentreSante,

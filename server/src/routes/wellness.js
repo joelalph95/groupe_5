@@ -147,4 +147,85 @@ router.get('/mood-stats', authenticateToken, async (req, res) => {
   }
 });
 
+// ==================== SUIVI SANTE (CRUD) ====================
+
+// Obtenir tous les suivis d'un patient
+router.get('/suivi-sante', authenticateToken, async (req, res) => {
+  try {
+    const suivis = await db.SuiviSante.findAll({
+      where: { patient_id: req.user.id },
+      order: [['date_creation', 'DESC']]
+    });
+    res.json(suivis);
+  } catch (error) {
+    console.error('Erreur récupération suivis:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Obtenir un suivi par type
+router.get('/suivi-sante/:type', authenticateToken, async (req, res) => {
+  try {
+    const { type } = req.params;
+    const suivis = await db.SuiviSante.findAll({
+      where: { patient_id: req.user.id, type },
+      order: [['date_creation', 'DESC']]
+    });
+    res.json(suivis);
+  } catch (error) {
+    console.error('Erreur récupération suivi:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Créer un suivi
+router.post('/suivi-sante', authenticateToken, async (req, res) => {
+  try {
+    const suivi = await db.SuiviSante.create({
+      ...req.body,
+      patient_id: req.user.id
+    });
+    res.status(201).json({ success: true, suivi });
+  } catch (error) {
+    console.error('Erreur création suivi:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Mettre à jour un suivi
+router.put('/suivi-sante/:id', authenticateToken, async (req, res) => {
+  try {
+    const suivi = await db.SuiviSante.findOne({
+      where: { id: req.params.id, patient_id: req.user.id }
+    });
+    if (!suivi) {
+      return res.status(404).json({ error: 'Suivi non trouvé' });
+    }
+    await suivi.update(req.body);
+    res.json({ success: true, suivi });
+  } catch (error) {
+    console.error('Erreur mise à jour suivi:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Supprimer un suivi
+router.delete('/suivi-sante/:id', authenticateToken, async (req, res) => {
+  try {
+    const suivi = await db.SuiviSante.findOne({
+      where: { id: req.params.id, patient_id: req.user.id }
+    });
+    if (!suivi) {
+      return res.status(404).json({ error: 'Suivi non trouvé' });
+    }
+    await suivi.destroy();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Erreur suppression suivi:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+
+
 module.exports = router;

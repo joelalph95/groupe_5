@@ -35,17 +35,23 @@ interface User {
   id: number; email?: string; nom?: string; prenom?: string;
   telephone: string; role: string; sexe?: string;
   groupe_sanguin?: string; statut: string;
+  adresse?: string; date_naissance?: string; createdAt?: string;
+  nom_pharmacie?: string; matricule?: string; zone_couverture?: string;
+  niveau_acces?: string;
 }
 interface Order {
-  id: number; Patient?: { nom: string; prenom: string };
-  Pharmacien?: { nom_pharmacie: string }; date_commande: string;
-  montant_total: number; statut: string;
-  CommandeDetails?: Array<{ id: number; quantite: number; Medicament?: { nom: string } }>;
+  id: number; Patient?: { nom: string; prenom: string; telephone?: string; email?: string };
+  Pharmacien?: { nom_pharmacie: string; telephone?: string; adresse?: string };
+  date_commande: string; montant_total: number; statut: string;
+  adresse_livraison?: string; note?: string;
+  CommandeDetails?: Array<{ id: number; quantite: number; prix_unitaire?: number; Medicament?: { nom: string; prix?: number; categorie?: string } }>;
 }
 interface Emergency {
-  id: number; Patient?: { nom: string; prenom: string; telephone: string };
+  id: number; Patient?: { nom: string; prenom: string; telephone: string; email?: string; groupe_sanguin?: string };
   type_urgence?: string; niveau_priorite?: string; localisation?: string;
-  statut: string; date_alerte: string; Ambulancier?: { nom: string };
+  statut: string; date_alerte: string; Ambulancier?: { nom: string; telephone?: string; matricule?: string };
+  description?: string; latitude?: number; longitude?: number;
+  date_resolution?: string;
 }
 interface Article {
   id: number; titre: string; contenu: string; resume?: string;
@@ -63,6 +69,7 @@ const AdminPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // ===== MODALS AJOUT =====
   const [showMedicineModal, setShowMedicineModal] = useState(false);
   const [showAmbulanceModal, setShowAmbulanceModal] = useState(false);
   const [showHospitalModal, setShowHospitalModal] = useState(false);
@@ -70,6 +77,14 @@ const AdminPage: React.FC = () => {
   const [showUserModal, setShowUserModal] = useState(false);
   const [showArticleModal, setShowArticleModal] = useState(false);
   const [editingArticle, setEditingArticle] = useState<Article | null>(null);
+
+  // ===== MODALS DÉTAILS (EN SAVOIR PLUS) =====
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [showUserDetailModal, setShowUserDetailModal] = useState(false);
+  const [selectedEmergency, setSelectedEmergency] = useState<Emergency | null>(null);
+  const [showEmergencyDetailModal, setShowEmergencyDetailModal] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [showOrderDetailModal, setShowOrderDetailModal] = useState(false);
 
   const [medicines, setMedicines] = useState<Medicine[]>([]);
   const [ambulances, setAmbulances] = useState<Ambulance[]>([]);
@@ -81,7 +96,6 @@ const AdminPage: React.FC = () => {
   const [articles, setArticles] = useState<Article[]>([]);
   const [stats, setStats] = useState<any>({});
 
-  // Formulaires contrôlés
   const [medForm, setMedForm] = useState({
     nom: '', categorie: 'Antalgique', description: '', prix: '', stock: '', necessite_ordonnance: false
   });
@@ -96,6 +110,8 @@ const AdminPage: React.FC = () => {
   const [emergencyFilter, setEmergencyFilter] = useState('ALL');
   const [articleSearch, setArticleSearch] = useState('');
   const [articleCatFilter, setArticleCatFilter] = useState('ALL');
+  const [userSearch, setUserSearch] = useState('');
+  const [userRoleFilter, setUserRoleFilter] = useState('ALL');
 
   const adminMapRef = useRef<L.Map | null>(null);
   const chartRefs = useRef<{ [key: string]: Chart | null }>({});
@@ -154,45 +170,36 @@ const AdminPage: React.FC = () => {
 
   // ===== MÉDICAMENTS =====
 
-const addMedicine = async () => {
-  const { nom, categorie, description, prix, stock, necessite_ordonnance } = medForm;
-  if (!nom.trim()) { showToast('Le nom est obligatoire', 'error'); return; }
-  const prixNum = parseFloat(prix);
-  const stockNum = parseInt(stock);
-  if (isNaN(prixNum) || prixNum <= 0) { showToast('Prix invalide', 'error'); return; }
-  if (isNaN(stockNum) || stockNum < 0) { showToast('Stock invalide', 'error'); return; }
-  
-  // Get the first active pharmacist or allow selection
-  // Option 1: Use the first available pharmacist
-  const defaultPharmacistId = pharmacies.find(p => p.statut === 'ACTIF')?.id;
-  
-  if (!defaultPharmacistId) {
-    showToast('Aucun pharmacien disponible. Veuillez d\'abord créer une pharmacie.', 'error');
-    return;
-  }
-  
-  try {
-    setLoading(true);
-    const r = await adminService.createMedicament({
-      nom: nom.trim(), 
-      description: description.trim() || 'Médicament',
-      categorie, 
-      prix: prixNum, 
-      stock: stockNum, 
-      necessite_ordonnance,
-      pharmacien_id: defaultPharmacistId  // Add this line
-    });
-    if (r.success) {
-      showToast('Médicament ajouté avec succès', 'success');
-      setShowMedicineModal(false);
-      setMedForm({ nom: '', categorie: 'Antalgique', description: '', prix: '', stock: '', necessite_ordonnance: false });
-      await loadMedicines();
+  const addMedicine = async () => {
+    const { nom, categorie, description, prix, stock, necessite_ordonnance } = medForm;
+    if (!nom.trim()) { showToast('Le nom est obligatoire', 'error'); return; }
+    const prixNum = parseFloat(prix);
+    const stockNum = parseInt(stock);
+    if (isNaN(prixNum) || prixNum <= 0) { showToast('Prix invalide', 'error'); return; }
+    if (isNaN(stockNum) || stockNum < 0) { showToast('Stock invalide', 'error'); return; }
+    const defaultPharmacistId = pharmacies.find(p => p.statut === 'ACTIF')?.id;
+    if (!defaultPharmacistId) {
+      showToast('Aucun pharmacien disponible. Veuillez d\'abord créer une pharmacie.', 'error');
+      return;
     }
-  } catch (e: any) { 
-    showToast(e?.response?.data?.error || "Erreur lors de l'ajout", 'error');
-  }
-  finally { setLoading(false); }
-};
+    try {
+      setLoading(true);
+      const r = await adminService.createMedicament({
+        nom: nom.trim(), description: description.trim() || 'Médicament',
+        categorie, prix: prixNum, stock: stockNum, necessite_ordonnance,
+        pharmacien_id: defaultPharmacistId
+      });
+      if (r.success) {
+        showToast('Médicament ajouté avec succès', 'success');
+        setShowMedicineModal(false);
+        setMedForm({ nom: '', categorie: 'Antalgique', description: '', prix: '', stock: '', necessite_ordonnance: false });
+        await loadMedicines();
+      }
+    } catch (e: any) {
+      showToast(e?.response?.data?.error || "Erreur lors de l'ajout", 'error');
+    }
+    finally { setLoading(false); }
+  };
 
   const deleteMedicine = async (id: number, nom: string) => {
     if (!window.confirm(`Supprimer "${nom}" ?`)) return;
@@ -465,6 +472,14 @@ const addMedicine = async () => {
     if (articleSearch && !a.titre.toLowerCase().includes(articleSearch.toLowerCase())) return false;
     return true;
   });
+  const filteredUsers = users.filter(u => {
+    if (userRoleFilter !== 'ALL' && u.role !== userRoleFilter) return false;
+    if (userSearch) {
+      const q = userSearch.toLowerCase();
+      return (u.nom || '').toLowerCase().includes(q) || (u.prenom || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q) || (u.telephone || '').toLowerCase().includes(q);
+    }
+    return true;
+  });
 
   // ===== EFFECTS =====
 
@@ -511,6 +526,40 @@ const addMedicine = async () => {
   const mS: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 };
   const mC: React.CSSProperties = { background: '#18181b', borderRadius: '1rem', padding: '1.5rem', width: '100%', maxWidth: '480px', margin: '1rem', maxHeight: '90vh', overflowY: 'auto', border: '1px solid #27272a' };
   const inp = "w-full bg-zinc-800 border border-zinc-700 rounded-xl p-3 text-white placeholder-zinc-500";
+
+  // ===== HELPERS DÉTAILS =====
+
+  const getRoleColor = (role: string) => {
+    switch (role) {
+      case 'PATIENT': return 'bg-info/20 text-info';
+      case 'ADMIN': return 'bg-danger/20 text-danger';
+      case 'AMBULANCIER': return 'bg-success/20 text-success';
+      case 'PHARMACIEN': return 'bg-warn/20 text-warn';
+      default: return 'bg-zinc-700 text-zinc-300';
+    }
+  };
+
+  const getPriorityColor = (priority?: string) => {
+    switch (priority) {
+      case 'CRITIQUE': return 'bg-danger/20 text-danger';
+      case 'ELEVE': return 'bg-orange-500/20 text-orange-400';
+      case 'MOYEN': return 'bg-warn/20 text-warn';
+      case 'FAIBLE': return 'bg-success/20 text-success';
+      default: return 'bg-zinc-700 text-zinc-300';
+    }
+  };
+
+  const DetailRow: React.FC<{ label: string; value?: string | number | null; icon?: string; highlight?: boolean }> = ({ label, value, icon, highlight }) => (
+    <div className="flex items-start justify-between py-2.5 border-b border-zinc-800 last:border-0">
+      <span className="text-xs text-zinc-500 flex items-center gap-2">
+        {icon && <i className={`fas ${icon} w-3 text-zinc-600`}></i>}
+        {label}
+      </span>
+      <span className={`text-sm font-medium text-right max-w-xs ${highlight ? 'text-info' : 'text-white'}`}>
+        {value || <span className="text-zinc-600 italic text-xs">Non renseigné</span>}
+      </span>
+    </div>
+  );
 
   return (
     <div id="adminApp">
@@ -770,13 +819,25 @@ const addMedicine = async () => {
                       </div>
                       {e.Patient?.telephone && <p className="text-xs text-info mb-2"><i className="fas fa-phone mr-1"></i><a href={`tel:${e.Patient.telephone}`}>{e.Patient.telephone}</a></p>}
                       {e.Ambulancier && <p className="text-xs text-zinc-500 mb-2"><i className="fas fa-ambulance mr-1"></i>{e.Ambulancier.nom}</p>}
-                      {e.statut !== 'RESOLVED' && (
-                        <div className="flex gap-2 mt-3">
-                          {e.statut === 'PENDING' && <button onClick={() => updateEmergencyStatus(e.id, 'ASSIGNED')} className="flex-1 py-2 rounded-xl bg-info/15 text-info text-xs font-semibold">Assigner</button>}
-                          {(e.statut === 'PENDING' || e.statut === 'ASSIGNED') && <button onClick={() => updateEmergencyStatus(e.id, 'IN_PROGRESS')} className="flex-1 py-2 rounded-xl bg-purple-500/15 text-purple-400 text-xs font-semibold">En cours</button>}
-                          <button onClick={() => updateEmergencyStatus(e.id, 'RESOLVED')} className="flex-1 py-2 rounded-xl bg-success/15 text-success text-xs font-semibold">Résoudre</button>
-                        </div>
-                      )}
+
+                      {/* Boutons actions + EN SAVOIR PLUS */}
+                      <div className="flex gap-2 mt-3">
+                        {/* Bouton EN SAVOIR PLUS */}
+                        <button
+                          onClick={() => { setSelectedEmergency(e); setShowEmergencyDetailModal(true); }}
+                          className="px-3 py-2 rounded-xl bg-zinc-800 text-zinc-300 text-xs font-semibold hover:bg-zinc-700 transition flex items-center gap-1"
+                        >
+                          <i className="fas fa-eye text-xs"></i>
+                          <span>Détails</span>
+                        </button>
+                        {e.statut !== 'RESOLVED' && (
+                          <>
+                            {e.statut === 'PENDING' && <button onClick={() => updateEmergencyStatus(e.id, 'ASSIGNED')} className="flex-1 py-2 rounded-xl bg-info/15 text-info text-xs font-semibold">Assigner</button>}
+                            {(e.statut === 'PENDING' || e.statut === 'ASSIGNED') && <button onClick={() => updateEmergencyStatus(e.id, 'IN_PROGRESS')} className="flex-1 py-2 rounded-xl bg-purple-500/15 text-purple-400 text-xs font-semibold">En cours</button>}
+                            <button onClick={() => updateEmergencyStatus(e.id, 'RESOLVED')} className="flex-1 py-2 rounded-xl bg-success/15 text-success text-xs font-semibold">Résoudre</button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -800,6 +861,14 @@ const addMedicine = async () => {
                       <div className="flex items-center justify-between">
                         <span className="text-info font-bold">{Number(o.montant_total).toLocaleString('fr-MG')} Ar</span>
                         <div className="flex gap-2">
+                          {/* Bouton EN SAVOIR PLUS commande */}
+                          <button
+                            onClick={() => { setSelectedOrder(o); setShowOrderDetailModal(true); }}
+                            className="px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 text-xs font-semibold hover:bg-zinc-700 transition flex items-center gap-1"
+                          >
+                            <i className="fas fa-eye text-xs"></i>
+                            <span>Détails</span>
+                          </button>
                           {o.statut === 'CONFIRMED' && <button onClick={() => updateOrderStatus(o.id, 'PREPARED')} className="px-3 py-1.5 rounded-lg bg-warn/15 text-warn text-xs">Préparer</button>}
                           {(o.statut === 'PREPARED' || o.statut === 'EN_LIVRAISON') && <button onClick={() => updateOrderStatus(o.id, 'DELIVERED')} className="px-3 py-1.5 rounded-lg bg-success/15 text-success text-xs">Livrer</button>}
                           {o.statut !== 'DELIVERED' && o.statut !== 'CANCELLED' && <button onClick={() => updateOrderStatus(o.id, 'CANCELLED')} className="px-3 py-1.5 rounded-lg bg-danger/15 text-danger text-xs">Annuler</button>}
@@ -819,22 +888,52 @@ const addMedicine = async () => {
                 <div><h1 className="text-2xl font-bold">Gestion des utilisateurs</h1><p className="text-zinc-400 text-sm">{users.length} utilisateurs</p></div>
                 <button onClick={() => setShowUserModal(true)} className="px-5 py-2.5 bg-success text-white rounded-xl text-sm font-semibold hover:bg-green-600 transition"><i className="fas fa-user-plus mr-2"></i>Ajouter</button>
               </div>
+
+              {/* Filtres utilisateurs */}
+              <div className="flex flex-wrap gap-3 mb-5">
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {['ALL', 'PATIENT', 'AMBULANCIER', 'PHARMACIEN', 'ADMIN'].map(role => (
+                    <button key={role} onClick={() => setUserRoleFilter(role)} className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition ${userRoleFilter === role ? 'bg-danger text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}>
+                      {role === 'ALL' ? 'Tous' : role === 'PATIENT' ? 'Patients' : role === 'AMBULANCIER' ? 'Ambulanciers' : role === 'PHARMACIEN' ? 'Pharmaciens' : 'Admins'}
+                      {role !== 'ALL' && <span className="ml-1 opacity-60">({users.filter(u => u.role === role).length})</span>}
+                    </button>
+                  ))}
+                </div>
+                <div className="relative flex-1 max-w-xs">
+                  <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm"></i>
+                  <input type="text" value={userSearch} onChange={e => setUserSearch(e.target.value)} placeholder="Rechercher un utilisateur..." className="pl-10 bg-zinc-800 border border-zinc-700 rounded-xl text-sm p-3 w-full" />
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
                 {['PATIENT', 'AMBULANCIER', 'PHARMACIEN', 'ADMIN'].map((role, i) => (<div key={i} className="card p-4 text-center"><p className="text-2xl font-bold text-info">{users.filter(u => u.role === role).length}</p><p className="text-xs text-zinc-400 mt-1">{role === 'PATIENT' ? 'Patients' : role === 'AMBULANCIER' ? 'Ambulanciers' : role === 'PHARMACIEN' ? 'Pharmaciens' : 'Admins'}</p></div>))}
               </div>
-              {users.length === 0 ? (<div className="card p-12 text-center text-zinc-500"><i className="fas fa-users text-4xl mb-3 opacity-30"></i><p>Aucun utilisateur</p></div>) : (
+              {filteredUsers.length === 0 ? (<div className="card p-12 text-center text-zinc-500"><i className="fas fa-users text-4xl mb-3 opacity-30"></i><p>Aucun utilisateur trouvé</p></div>) : (
                 <div className="space-y-3">
-                  {users.map(u => (
+                  {filteredUsers.map(u => (
                     <div key={`${u.role}-${u.id}`} className="card p-5 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-full bg-gradient-to-br from-danger to-orange-500 flex items-center justify-center text-base font-bold text-white">{(u.nom || '?')[0].toUpperCase()}</div>
-                        <div>
-                          <p className="font-semibold">{u.nom} {u.prenom || ''}</p>
-                          <p className="text-xs text-zinc-400">{u.email || u.telephone}</p>
-                          <div className="flex gap-1 mt-1"><span className={`badge text-[10px] ${u.role === 'PATIENT' ? 'bg-info/20 text-info' : u.role === 'ADMIN' ? 'bg-danger/20 text-danger' : u.role === 'AMBULANCIER' ? 'bg-success/20 text-success' : 'bg-warn/20 text-warn'}`}>{u.role}</span><span className={`badge text-[10px] ${u.statut === 'ACTIF' ? 'bg-success/20 text-success' : 'bg-zinc-700 text-zinc-400'}`}>{u.statut}</span></div>
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="w-11 h-11 rounded-full bg-gradient-to-br from-danger to-orange-500 flex items-center justify-center text-base font-bold text-white flex-shrink-0">{(u.nom || '?')[0].toUpperCase()}</div>
+                        <div className="min-w-0">
+                          <p className="font-semibold truncate">{u.nom} {u.prenom || ''}</p>
+                          <p className="text-xs text-zinc-400 truncate">{u.email || u.telephone}</p>
+                          <div className="flex gap-1 mt-1 flex-wrap">
+                            <span className={`badge text-[10px] ${getRoleColor(u.role)}`}>{u.role}</span>
+                            <span className={`badge text-[10px] ${u.statut === 'ACTIF' ? 'bg-success/20 text-success' : 'bg-zinc-700 text-zinc-400'}`}>{u.statut}</span>
+                            {u.groupe_sanguin && <span className="badge text-[10px] bg-danger/10 text-danger">{u.groupe_sanguin}</span>}
+                          </div>
                         </div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-shrink-0">
+                        {/* Bouton EN SAVOIR PLUS utilisateur */}
+                        <button
+                          onClick={() => { setSelectedUser(u); setShowUserDetailModal(true); }}
+                          className="px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 text-xs font-semibold hover:bg-zinc-700 transition flex items-center gap-1"
+                          title="Voir les détails"
+                        >
+                          <i className="fas fa-eye text-xs"></i>
+                          <span className="hidden sm:inline">En savoir plus</span>
+                        </button>
                         <button onClick={() => toggleUserStatus(u.id, u.role, u.statut)} className={`px-3 py-1.5 rounded-lg text-xs ${u.statut === 'ACTIF' ? 'bg-warn/15 text-warn' : 'bg-success/15 text-success'}`}>{u.statut === 'ACTIF' ? 'Désactiver' : 'Activer'}</button>
                         <button onClick={() => deleteUser(u.id, u.role, `${u.nom} ${u.prenom || ''}`)} className="px-3 py-1.5 rounded-lg bg-danger/15 text-danger text-xs"><i className="fas fa-trash"></i></button>
                       </div>
@@ -937,9 +1036,11 @@ const addMedicine = async () => {
         </div>
       </div>
 
-      {/* ========== MODALS ========== */}
+      {/* ===================================================== */}
+      {/* ==================== MODALS AJOUT ================== */}
+      {/* ===================================================== */}
 
-      {/* Medicine Modal - FORMULAIRE CONTRÔLÉ */}
+      {/* Medicine Modal */}
       {showMedicineModal && (
         <div style={mS} onClick={() => setShowMedicineModal(false)}>
           <div style={mC} onClick={e => e.stopPropagation()}>
@@ -1032,7 +1133,7 @@ const addMedicine = async () => {
         </div>
       )}
 
-      {/* Article Modal - FORMULAIRE CONTRÔLÉ */}
+      {/* Article Modal */}
       {showArticleModal && (
         <div style={mS} onClick={() => setShowArticleModal(false)}>
           <div style={{ ...mC, maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
@@ -1051,6 +1152,366 @@ const addMedicine = async () => {
               </div>
               <div><label className="text-xs text-zinc-400 mb-1 block">Statut de publication</label><select value={articleForm.statut} onChange={e => setArticleForm(f => ({ ...f, statut: e.target.value }))} className={inp}><option value="PUBLIE">🟢 Publier maintenant (visible par les patients)</option><option value="BROUILLON">📝 Brouillon (non visible)</option><option value="ARCHIVE">📦 Archiver</option></select></div>
               <button onClick={saveArticle} disabled={loading} className="w-full bg-info text-white py-3 rounded-xl font-semibold hover:bg-cyan-600 transition disabled:opacity-50"><i className="fas fa-save mr-2"></i>{loading ? 'Sauvegarde...' : editingArticle ? "Mettre à jour l'article" : "Publier l'article"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================== */}
+      {/* ============= MODAL DÉTAILS UTILISATEUR ============= */}
+      {/* ===================================================== */}
+      {showUserDetailModal && selectedUser && (
+        <div style={mS} onClick={() => setShowUserDetailModal(false)}>
+          <div style={{ ...mC, maxWidth: '520px' }} onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold flex items-center gap-2">
+                <i className="fas fa-id-card text-info"></i>
+                Fiche utilisateur
+              </h3>
+              <button onClick={() => setShowUserDetailModal(false)} className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center hover:bg-zinc-700 transition">
+                <i className="fas fa-times text-zinc-400 text-sm"></i>
+              </button>
+            </div>
+
+            {/* Avatar + nom + badges */}
+            <div className="flex items-center gap-4 mb-6 p-4 bg-zinc-800/50 rounded-2xl">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-danger to-orange-500 flex items-center justify-center text-2xl font-bold text-white flex-shrink-0">
+                {(selectedUser.nom || '?')[0].toUpperCase()}
+              </div>
+              <div>
+                <p className="text-xl font-bold">{selectedUser.nom} {selectedUser.prenom || ''}</p>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  <span className={`badge ${getRoleColor(selectedUser.role)}`}>{selectedUser.role}</span>
+                  <span className={`badge ${selectedUser.statut === 'ACTIF' ? 'bg-success/20 text-success' : 'bg-zinc-700 text-zinc-400'}`}>
+                    {selectedUser.statut === 'ACTIF' ? '🟢 Actif' : '🔴 Inactif'}
+                  </span>
+                  {selectedUser.groupe_sanguin && (
+                    <span className="badge bg-danger/20 text-danger">
+                      <i className="fas fa-tint mr-1 text-xs"></i>{selectedUser.groupe_sanguin}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Informations détaillées */}
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Informations personnelles</p>
+              <DetailRow label="ID système" value={`#${selectedUser.id}`} icon="fa-hashtag" />
+              <DetailRow label="Téléphone" value={selectedUser.telephone} icon="fa-phone" highlight />
+              <DetailRow label="Email" value={selectedUser.email} icon="fa-envelope" highlight />
+              <DetailRow label="Adresse" value={selectedUser.adresse} icon="fa-map-marker-alt" />
+              <DetailRow label="Sexe" value={selectedUser.sexe === 'MASCULIN' ? 'Masculin' : selectedUser.sexe === 'FEMININ' ? 'Féminin' : undefined} icon="fa-venus-mars" />
+              <DetailRow label="Date de naissance" value={selectedUser.date_naissance ? new Date(selectedUser.date_naissance).toLocaleDateString('fr-FR') : undefined} icon="fa-birthday-cake" />
+              <DetailRow label="Groupe sanguin" value={selectedUser.groupe_sanguin} icon="fa-tint" />
+
+              {/* Infos spécifiques au rôle */}
+              {selectedUser.role === 'PHARMACIEN' && (
+                <>
+                  <div className="pt-3"><p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Informations pharmacie</p></div>
+                  <DetailRow label="Nom pharmacie" value={selectedUser.nom_pharmacie || selectedUser.nom} icon="fa-pills" />
+                </>
+              )}
+              {selectedUser.role === 'AMBULANCIER' && (
+                <>
+                  <div className="pt-3"><p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Informations ambulancier</p></div>
+                  <DetailRow label="Matricule" value={selectedUser.matricule} icon="fa-id-badge" />
+                  <DetailRow label="Zone de couverture" value={selectedUser.zone_couverture} icon="fa-map" />
+                </>
+              )}
+              {selectedUser.role === 'ADMIN' && selectedUser.niveau_acces && (
+                <>
+                  <div className="pt-3"><p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Informations admin</p></div>
+                  <DetailRow label="Niveau d'accès" value={selectedUser.niveau_acces} icon="fa-shield-alt" />
+                </>
+              )}
+
+              <div className="pt-3"><p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Activité</p></div>
+              <DetailRow label="Inscrit le" value={selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : undefined} icon="fa-calendar-plus" />
+              {selectedUser.role === 'PATIENT' && (
+                <>
+                  <DetailRow label="Commandes passées" value={orders.filter(o => o.Patient?.nom === selectedUser.nom).length.toString()} icon="fa-shopping-bag" />
+                  <DetailRow label="Urgences déclenchées" value={emergencies.filter(e => e.Patient?.nom === selectedUser.nom).length.toString()} icon="fa-exclamation-triangle" />
+                </>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 mt-6 pt-4 border-t border-zinc-800">
+              <button
+                onClick={() => { toggleUserStatus(selectedUser.id, selectedUser.role, selectedUser.statut); setShowUserDetailModal(false); }}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition ${selectedUser.statut === 'ACTIF' ? 'bg-warn/15 text-warn hover:bg-warn/25' : 'bg-success/15 text-success hover:bg-success/25'}`}
+              >
+                <i className={`fas fa-power-off mr-2`}></i>
+                {selectedUser.statut === 'ACTIF' ? 'Désactiver' : 'Activer'}
+              </button>
+              <button
+                onClick={() => { deleteUser(selectedUser.id, selectedUser.role, `${selectedUser.nom} ${selectedUser.prenom || ''}`); setShowUserDetailModal(false); }}
+                className="px-5 py-2.5 rounded-xl bg-danger/15 text-danger text-sm font-semibold hover:bg-danger/25 transition"
+              >
+                <i className="fas fa-trash mr-2"></i>Supprimer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================== */}
+      {/* ============= MODAL DÉTAILS URGENCE ================ */}
+      {/* ===================================================== */}
+      {showEmergencyDetailModal && selectedEmergency && (
+        <div style={mS} onClick={() => setShowEmergencyDetailModal(false)}>
+          <div style={{ ...mC, maxWidth: '540px' }} onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold flex items-center gap-2">
+                <i className="fas fa-exclamation-triangle text-danger"></i>
+                Détails de l'urgence #{selectedEmergency.id}
+              </h3>
+              <button onClick={() => setShowEmergencyDetailModal(false)} className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center hover:bg-zinc-700 transition">
+                <i className="fas fa-times text-zinc-400 text-sm"></i>
+              </button>
+            </div>
+
+            {/* Statut + priorité */}
+            <div className="flex items-center gap-3 mb-6 p-4 bg-zinc-800/50 rounded-2xl">
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center flex-shrink-0 ${selectedEmergency.niveau_priorite === 'CRITIQUE' ? 'bg-danger/20' : selectedEmergency.niveau_priorite === 'ELEVE' ? 'bg-orange-500/20' : 'bg-warn/20'}`}>
+                <i className={`fas fa-exclamation-triangle text-xl ${selectedEmergency.niveau_priorite === 'CRITIQUE' ? 'text-danger' : selectedEmergency.niveau_priorite === 'ELEVE' ? 'text-orange-400' : 'text-warn'}`}></i>
+              </div>
+              <div className="flex-1">
+                <p className="font-bold text-base">{selectedEmergency.type_urgence || 'Urgence médicale'}</p>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  <span className={`badge ${getPriorityColor(selectedEmergency.niveau_priorite)}`}>
+                    Priorité: {selectedEmergency.niveau_priorite || 'Non définie'}
+                  </span>
+                  <span className={`badge ${statusColors[selectedEmergency.statut] || 'bg-zinc-700'}`}>
+                    {statusLabels[selectedEmergency.statut] || selectedEmergency.statut}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Informations urgence */}
+            <div className="space-y-1 mb-4">
+              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Détails de l'alerte</p>
+              <DetailRow label="ID urgence" value={`#${selectedEmergency.id}`} icon="fa-hashtag" />
+              <DetailRow label="Type d'urgence" value={selectedEmergency.type_urgence} icon="fa-heartbeat" />
+              <DetailRow label="Localisation" value={selectedEmergency.localisation} icon="fa-map-marker-alt" highlight />
+              <DetailRow label="Date d'alerte" value={new Date(selectedEmergency.date_alerte).toLocaleString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })} icon="fa-clock" />
+              {selectedEmergency.date_resolution && (
+                <DetailRow label="Date de résolution" value={new Date(selectedEmergency.date_resolution).toLocaleString('fr-FR')} icon="fa-check-circle" />
+              )}
+              {selectedEmergency.description && (
+                <div className="py-2.5 border-b border-zinc-800">
+                  <p className="text-xs text-zinc-500 mb-1 flex items-center gap-2"><i className="fas fa-file-alt w-3 text-zinc-600"></i>Description</p>
+                  <p className="text-sm text-white">{selectedEmergency.description}</p>
+                </div>
+              )}
+              {selectedEmergency.latitude && selectedEmergency.longitude && (
+                <DetailRow label="Coordonnées GPS" value={`${selectedEmergency.latitude.toFixed(5)}, ${selectedEmergency.longitude.toFixed(5)}`} icon="fa-globe" />
+              )}
+            </div>
+
+            {/* Patient */}
+            {selectedEmergency.Patient && (
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Patient concerné</p>
+                <div className="p-3 bg-zinc-800/50 rounded-xl space-y-1">
+                  <DetailRow label="Nom complet" value={`${selectedEmergency.Patient.nom} ${selectedEmergency.Patient.prenom}`} icon="fa-user" />
+                  <DetailRow label="Téléphone" value={selectedEmergency.Patient.telephone} icon="fa-phone" highlight />
+                  {selectedEmergency.Patient.email && <DetailRow label="Email" value={selectedEmergency.Patient.email} icon="fa-envelope" />}
+                  {selectedEmergency.Patient.groupe_sanguin && <DetailRow label="Groupe sanguin" value={selectedEmergency.Patient.groupe_sanguin} icon="fa-tint" />}
+                </div>
+              </div>
+            )}
+
+            {/* Ambulancier assigné */}
+            {selectedEmergency.Ambulancier && (
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Ambulancier assigné</p>
+                <div className="p-3 bg-zinc-800/50 rounded-xl space-y-1">
+                  <DetailRow label="Nom" value={selectedEmergency.Ambulancier.nom} icon="fa-user-md" />
+                  {selectedEmergency.Ambulancier.telephone && <DetailRow label="Téléphone" value={selectedEmergency.Ambulancier.telephone} icon="fa-phone" highlight />}
+                  {selectedEmergency.Ambulancier.matricule && <DetailRow label="Matricule" value={selectedEmergency.Ambulancier.matricule} icon="fa-id-badge" />}
+                </div>
+              </div>
+            )}
+
+            {/* Actions */}
+            {selectedEmergency.statut !== 'RESOLVED' && (
+              <div className="flex gap-2 mt-6 pt-4 border-t border-zinc-800">
+                {selectedEmergency.statut === 'PENDING' && (
+                  <button onClick={() => { updateEmergencyStatus(selectedEmergency.id, 'ASSIGNED'); setShowEmergencyDetailModal(false); }} className="flex-1 py-2.5 rounded-xl bg-info/15 text-info text-sm font-semibold hover:bg-info/25 transition">
+                    <i className="fas fa-user-check mr-2"></i>Assigner
+                  </button>
+                )}
+                {(selectedEmergency.statut === 'PENDING' || selectedEmergency.statut === 'ASSIGNED') && (
+                  <button onClick={() => { updateEmergencyStatus(selectedEmergency.id, 'IN_PROGRESS'); setShowEmergencyDetailModal(false); }} className="flex-1 py-2.5 rounded-xl bg-purple-500/15 text-purple-400 text-sm font-semibold hover:bg-purple-500/25 transition">
+                    <i className="fas fa-spinner mr-2"></i>En cours
+                  </button>
+                )}
+                <button onClick={() => { updateEmergencyStatus(selectedEmergency.id, 'RESOLVED'); setShowEmergencyDetailModal(false); }} className="flex-1 py-2.5 rounded-xl bg-success/15 text-success text-sm font-semibold hover:bg-success/25 transition">
+                  <i className="fas fa-check mr-2"></i>Résoudre
+                </button>
+              </div>
+            )}
+            {selectedEmergency.statut === 'RESOLVED' && (
+              <div className="mt-4 p-3 bg-success/10 rounded-xl text-center">
+                <p className="text-success text-sm font-semibold"><i className="fas fa-check-circle mr-2"></i>Urgence résolue</p>
+              </div>
+            )}
+
+            {/* Lien appel direct patient */}
+            {selectedEmergency.Patient?.telephone && (
+              <a href={`tel:${selectedEmergency.Patient.telephone}`} className="mt-3 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-info/10 text-info text-sm font-semibold hover:bg-info/20 transition">
+                <i className="fas fa-phone"></i>Appeler le patient
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================== */}
+      {/* ============= MODAL DÉTAILS COMMANDE =============== */}
+      {/* ===================================================== */}
+      {showOrderDetailModal && selectedOrder && (
+        <div style={mS} onClick={() => setShowOrderDetailModal(false)}>
+          <div style={{ ...mC, maxWidth: '540px' }} onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold flex items-center gap-2">
+                <i className="fas fa-shopping-bag text-info"></i>
+                Commande #{selectedOrder.id}
+              </h3>
+              <button onClick={() => setShowOrderDetailModal(false)} className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center hover:bg-zinc-700 transition">
+                <i className="fas fa-times text-zinc-400 text-sm"></i>
+              </button>
+            </div>
+
+            {/* Résumé commande */}
+            <div className="flex items-center justify-between mb-6 p-4 bg-zinc-800/50 rounded-2xl">
+              <div>
+                <p className="text-2xl font-bold text-info">{Number(selectedOrder.montant_total).toLocaleString('fr-MG')} Ar</p>
+                <p className="text-xs text-zinc-400 mt-1">
+                  {new Date(selectedOrder.date_commande).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                </p>
+              </div>
+              <span className={`badge text-sm px-4 py-2 ${statusColors[selectedOrder.statut] || 'bg-zinc-700'}`}>
+                {statusLabels[selectedOrder.statut] || selectedOrder.statut}
+              </span>
+            </div>
+
+            {/* Informations commande */}
+            <div className="space-y-1 mb-4">
+              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Informations générales</p>
+              <DetailRow label="ID commande" value={`#${selectedOrder.id}`} icon="fa-hashtag" />
+              <DetailRow label="Date" value={new Date(selectedOrder.date_commande).toLocaleString('fr-FR')} icon="fa-calendar" />
+              <DetailRow label="Montant total" value={`${Number(selectedOrder.montant_total).toLocaleString('fr-MG')} Ar`} icon="fa-money-bill" highlight />
+              {selectedOrder.adresse_livraison && <DetailRow label="Adresse de livraison" value={selectedOrder.adresse_livraison} icon="fa-map-marker-alt" />}
+              {selectedOrder.note && (
+                <div className="py-2.5 border-b border-zinc-800">
+                  <p className="text-xs text-zinc-500 mb-1 flex items-center gap-2"><i className="fas fa-sticky-note w-3 text-zinc-600"></i>Note</p>
+                  <p className="text-sm text-white">{selectedOrder.note}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Patient */}
+            {selectedOrder.Patient && (
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Patient</p>
+                <div className="p-3 bg-zinc-800/50 rounded-xl space-y-1">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-danger to-orange-500 flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
+                      {(selectedOrder.Patient.nom || '?')[0].toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-semibold">{selectedOrder.Patient.nom} {selectedOrder.Patient.prenom}</p>
+                      {selectedOrder.Patient.telephone && <p className="text-xs text-info">{selectedOrder.Patient.telephone}</p>}
+                    </div>
+                  </div>
+                  {selectedOrder.Patient.email && <DetailRow label="Email" value={selectedOrder.Patient.email} icon="fa-envelope" />}
+                  {selectedOrder.Patient.telephone && (
+                    <a href={`tel:${selectedOrder.Patient.telephone}`} className="flex items-center gap-2 text-info text-xs mt-2 hover:underline">
+                      <i className="fas fa-phone text-xs"></i>Appeler le patient
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Pharmacie */}
+            {selectedOrder.Pharmacien && (
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Pharmacie</p>
+                <div className="p-3 bg-zinc-800/50 rounded-xl space-y-1">
+                  <DetailRow label="Nom" value={selectedOrder.Pharmacien.nom_pharmacie} icon="fa-pills" />
+                  {selectedOrder.Pharmacien.telephone && <DetailRow label="Téléphone" value={selectedOrder.Pharmacien.telephone} icon="fa-phone" highlight />}
+                  {selectedOrder.Pharmacien.adresse && <DetailRow label="Adresse" value={selectedOrder.Pharmacien.adresse} icon="fa-map-marker-alt" />}
+                </div>
+              </div>
+            )}
+
+            {/* Articles commandés */}
+            {selectedOrder.CommandeDetails && selectedOrder.CommandeDetails.length > 0 && (
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">
+                  Articles commandés ({selectedOrder.CommandeDetails.length})
+                </p>
+                <div className="space-y-2">
+                  {selectedOrder.CommandeDetails.map((detail, idx) => (
+                    <div key={detail.id || idx} className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-xl">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-info/15 flex items-center justify-center flex-shrink-0">
+                          <i className="fas fa-pills text-info text-sm"></i>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold">{detail.Medicament?.nom || 'Médicament inconnu'}</p>
+                          {detail.Medicament?.categorie && <p className="text-xs text-zinc-500">{detail.Medicament.categorie}</p>}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-semibold">x{detail.quantite}</p>
+                        {detail.prix_unitaire && (
+                          <p className="text-xs text-info">{(detail.prix_unitaire * detail.quantite).toLocaleString('fr-MG')} Ar</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Total recap */}
+                <div className="flex justify-between items-center p-3 bg-info/10 rounded-xl mt-3">
+                  <span className="text-sm font-semibold text-zinc-300">Total</span>
+                  <span className="text-info font-bold text-lg">{Number(selectedOrder.montant_total).toLocaleString('fr-MG')} Ar</span>
+                </div>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex gap-2 mt-4 pt-4 border-t border-zinc-800">
+              {selectedOrder.statut === 'CONFIRMED' && (
+                <button onClick={() => { updateOrderStatus(selectedOrder.id, 'PREPARED'); setShowOrderDetailModal(false); }} className="flex-1 py-2.5 rounded-xl bg-warn/15 text-warn text-sm font-semibold hover:bg-warn/25 transition">
+                  <i className="fas fa-box mr-2"></i>Préparer
+                </button>
+              )}
+              {(selectedOrder.statut === 'PREPARED' || selectedOrder.statut === 'EN_LIVRAISON') && (
+                <button onClick={() => { updateOrderStatus(selectedOrder.id, 'DELIVERED'); setShowOrderDetailModal(false); }} className="flex-1 py-2.5 rounded-xl bg-success/15 text-success text-sm font-semibold hover:bg-success/25 transition">
+                  <i className="fas fa-truck mr-2"></i>Marquer livré
+                </button>
+              )}
+              {selectedOrder.statut !== 'DELIVERED' && selectedOrder.statut !== 'CANCELLED' && (
+                <button onClick={() => { updateOrderStatus(selectedOrder.id, 'CANCELLED'); setShowOrderDetailModal(false); }} className="px-5 py-2.5 rounded-xl bg-danger/15 text-danger text-sm font-semibold hover:bg-danger/25 transition">
+                  <i className="fas fa-times mr-2"></i>Annuler
+                </button>
+              )}
+              {(selectedOrder.statut === 'DELIVERED' || selectedOrder.statut === 'CANCELLED') && (
+                <div className={`w-full p-3 rounded-xl text-center text-sm font-semibold ${selectedOrder.statut === 'DELIVERED' ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
+                  <i className={`fas ${selectedOrder.statut === 'DELIVERED' ? 'fa-check-circle' : 'fa-times-circle'} mr-2`}></i>
+                  {selectedOrder.statut === 'DELIVERED' ? 'Commande livrée' : 'Commande annulée'}
+                </div>
+              )}
             </div>
           </div>
         </div>
